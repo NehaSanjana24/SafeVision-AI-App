@@ -1,0 +1,6 @@
+{
+  "name": "SafeVision AI - Workplace Safety & PPE Monitoring",
+  "description": "AI-powered workplace safety monitoring platform for real-time Personal Protective Equipment (PPE) detection, automated violation flagging, compliance analytics, and incident reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
