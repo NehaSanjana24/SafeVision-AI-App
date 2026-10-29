@@ -20,8 +20,10 @@ import {
   Flag,
   RotateCcw,
   CheckCircle2,
+  BookOpen,
 } from 'lucide-react';
 import { FalsePositiveModal, FalsePositiveTarget } from '../components/detection/FalsePositiveModal';
+import { PolicyDrawer } from '../components/knowledge/PolicyDrawer';
 
 export const AlertsPage: React.FC = () => {
   const { isAdmin } = useAuth();
@@ -35,6 +37,17 @@ export const AlertsPage: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'false_positive'>('all');
+
+  // Policy Reference Drawer State
+  const [showPolicyDrawer, setShowPolicyDrawer] = useState(false);
+  const [selectedPolicyViolation, setSelectedPolicyViolation] = useState<string>('helmet');
+  const [hasKnowledgeDocs, setHasKnowledgeDocs] = useState<boolean>(true);
+
+  useEffect(() => {
+    repository.getAllDocuments().then((docs) => {
+      setHasKnowledgeDocs(docs.length > 0);
+    }).catch(() => setHasKnowledgeDocs(false));
+  }, []);
 
   // Modal inspection
   const [activeModalViolation, setActiveModalViolation] = useState<Violation | null>(null);
@@ -373,6 +386,19 @@ export const AlertsPage: React.FC = () => {
                           </button>
                         )}
 
+                        {hasKnowledgeDocs && (
+                          <button
+                            onClick={() => {
+                              setSelectedPolicyViolation(v.type);
+                              setShowPolicyDrawer(true);
+                            }}
+                            title="View Safety Policy Reference"
+                            className="p-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-[#7C5CFF] hover:text-violet-300 transition-colors"
+                          >
+                            <BookOpen className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
                         <button
                           onClick={() => setActiveModalViolation(v)}
                           title="Inspect Evidence Frame"
@@ -548,6 +574,18 @@ export const AlertsPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                {hasKnowledgeDocs && (
+                  <button
+                    onClick={() => {
+                      setSelectedPolicyViolation(activeModalViolation.type);
+                      setShowPolicyDrawer(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-violet-950/30"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>View Policy Citations</span>
+                  </button>
+                )}
                 {isAdmin && (
                   <button
                     onClick={() => {
@@ -578,6 +616,13 @@ export const AlertsPage: React.FC = () => {
         onClose={() => setFpModalTarget(null)}
         target={fpModalTarget}
         onSuccess={handleFalsePositiveSuccess}
+      />
+
+      {/* Regulatory Safety Policy Reference Drawer */}
+      <PolicyDrawer
+        isOpen={showPolicyDrawer}
+        onClose={() => setShowPolicyDrawer(false)}
+        violationType={selectedPolicyViolation}
       />
     </div>
   );

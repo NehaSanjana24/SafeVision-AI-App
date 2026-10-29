@@ -87,6 +87,7 @@ export interface PPESettings {
   frameSampleRate: number; // seconds per frame for video, default 1
   alertSound: boolean;
   autoSaveScans: boolean;
+  disableKnowledgeAI?: boolean; // When true, uses keyword-only search & disables AI cloud transmission
 }
 
 export interface EngineInfo {
@@ -94,4 +95,86 @@ export interface EngineInfo {
   inferenceUrl: string | null;
   hasGeminiKey: boolean;
   activeEngine: 'YOLOv8 API' | 'Gemini vision';
+}
+
+// Knowledge Base (Document Intelligence) Types
+export type DocumentStatus = 'queued' | 'parsing' | 'chunking' | 'embedding' | 'extracting' | 'complete' | 'failed';
+export type DocumentFileType = 'pdf' | 'docx' | 'csv' | 'xlsx' | 'txt' | 'md' | 'image';
+
+export interface KnowledgeDocument {
+  id: string;
+  userId: string;
+  fileName: string;
+  fileType: DocumentFileType;
+  sizeBytes: number;
+  hash: string;
+  status: DocumentStatus;
+  progressPct: number;
+  error?: string;
+  pageCount?: number;
+  ocrUsed?: boolean;
+  createdAt: string;
+  contentRaw?: string; // For rapid preview/rendering
+}
+
+export interface DocumentChunk {
+  id: string;
+  docId: string;
+  text: string;
+  page?: number;
+  row?: number;
+  sheet?: string;
+  sectionTitle?: string;
+  embedding?: number[];
+}
+
+export type ExtractedFieldCategory =
+  | 'ppe_requirements'
+  | 'inspection_frequency'
+  | 'penalties'
+  | 'emergency_procedures'
+  | 'roles_contacts'
+  | 'effective_dates'
+  | 'standards';
+
+export type ReviewStatus = 'unreviewed' | 'confirmed' | 'rejected';
+
+export interface ExtractedField {
+  id: string;
+  docId: string;
+  category: ExtractedFieldCategory;
+  label: string;
+  value: string;
+  sourceChunkId?: string;
+  page?: number;
+  row?: number;
+  confidence: number;
+  reviewStatus: ReviewStatus;
+  createdAt: string;
+}
+
+export interface SearchHistoryItem {
+  id: string;
+  userId: string;
+  query: string;
+  createdAt: string;
+}
+
+export interface SearchResultItem {
+  chunk: DocumentChunk;
+  doc: KnowledgeDocument;
+  score: number;
+  snippet: string;
+  matchTerms: string[];
+}
+
+export interface CitationItem {
+  number: number;
+  docId: string;
+  fileName: string;
+  location: string;
+  page?: number;
+  row?: number;
+  sheet?: string;
+  text: string;
 }

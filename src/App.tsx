@@ -10,6 +10,7 @@ import { DetectionPage } from './pages/DetectionPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AlertsPage } from './pages/AlertsPage';
+import { KnowledgePage } from './pages/KnowledgePage';
 
 // Standard Error Boundary
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: any }> {
@@ -65,6 +66,7 @@ export default function App() {
                   <Route path="/detect" element={<DetectionPage />} />
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/knowledge" element={<KnowledgePage />} />
                   <Route path="/alerts" element={<AlertsPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>

@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   FileText,
   BellRing,
+  BookOpen,
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
@@ -25,6 +26,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { to: '/detect', label: 'PPE Detection', icon: ScanEye },
     { to: '/dashboard', label: 'Command Center', icon: LayoutDashboard },
     { to: '/reports', label: 'Safety Reports', icon: FileText },
+    { to: '/knowledge', label: 'Knowledge Base', icon: BookOpen },
     { to: '/alerts', label: 'Alert History', icon: BellRing, badge: alertsCount },
   ];
 

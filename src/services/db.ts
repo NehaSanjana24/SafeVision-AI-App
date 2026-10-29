@@ -3,7 +3,7 @@
  */
 
 const DB_NAME = 'safevision_db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -26,6 +26,24 @@ export function getDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('feedback')) {
         db.createObjectStore('feedback', { keyPath: 'id' });
+      }
+      // Knowledge Base stores
+      if (!db.objectStoreNames.contains('documents')) {
+        db.createObjectStore('documents', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('chunks')) {
+        const chunkStore = db.createObjectStore('chunks', { keyPath: 'id' });
+        chunkStore.createIndex('docId', 'docId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('extractedFields')) {
+        const fieldStore = db.createObjectStore('extractedFields', { keyPath: 'id' });
+        fieldStore.createIndex('docId', 'docId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('searchHistory')) {
+        db.createObjectStore('searchHistory', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('documentBlobs')) {
+        db.createObjectStore('documentBlobs', { keyPath: 'id' });
       }
     };
 

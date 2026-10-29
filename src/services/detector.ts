@@ -35,35 +35,130 @@ export function getImageDimensions(blob: Blob): Promise<{ width: number; height:
 
 export const API_URL = "https://safevision-yolo-api-2.onrender.com";
 
+let lastYoloFailureTimestamp = 0;
+
+export interface VideoUploadProgress {
+  stage: 'upload' | 'processing';
+  percent: number;
+  loadedMb: number;
+  totalMb: number;
+  speedText?: string;
+}
+
 /**
  * Detect PPE in video using SafeVision YOLO API (/predict-video)
  * Sends multipart/form-data with "file" and query param "confidence"
+ * Supports real-time upload progress tracking via onProgress callback
  * Returns Object URL of the returned annotated video blob
  */
 export async function detectVideo(
   videoFile: File | Blob,
   confidence: number = 0.25,
-  customApiUrl?: string
+  customApiUrl?: string,
+  onProgress?: (progress: VideoUploadProgress) => void
 ): Promise<string> {
-  const base = (customApiUrl || detector.getInferenceUrl() || API_URL).replace(/\/+$/, '');
-  const formData = new FormData();
-  formData.append("file", videoFile);
-
-  const response = await fetch(
-    `${base}/predict-video?confidence=${confidence}`,
-    {
-      method: "POST",
-      body: formData,
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || `Video inference failed with status ${response.status}`);
+  if (!videoFile || videoFile.size === 0) {
+    throw new Error('Video file is empty. Please select a valid video recording.');
   }
 
-  const videoBlob = await response.blob();
-  return URL.createObjectURL(videoBlob);
+  const base = (customApiUrl || detector.getInferenceUrl() || API_URL).replace(/\/+$/, '');
+  const totalBytes = videoFile.size || 1;
+  const totalMb = Math.round((totalBytes / (1024 * 1024)) * 10) / 10;
+
+  // Format file name with .mp4 extension for OpenCV compatibility on Linux
+  let sanitizedName = (videoFile as File).name || 'video_clip.mp4';
+  if (!sanitizedName.toLowerCase().endsWith('.mp4')) {
+    sanitizedName = `${sanitizedName.replace(/\.[^/.]+$/, '')}.mp4`;
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const endpoint = `${base}/predict-video?confidence=${confidence}`;
+
+    xhr.open('POST', endpoint, true);
+    xhr.responseType = 'blob';
+
+    const startTime = performance.now();
+
+    // Track upload progress
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        const percent = Math.min(99, Math.round((e.loaded / e.total) * 100));
+        const loadedMb = Math.round((e.loaded / (1024 * 1024)) * 10) / 10;
+        const elapsedSec = (performance.now() - startTime) / 1000;
+        const speedMbPerSec = elapsedSec > 0 ? (loadedMb / elapsedSec).toFixed(1) : '1.0';
+
+        onProgress({
+          stage: 'upload',
+          percent,
+          loadedMb,
+          totalMb,
+          speedText: `${speedMbPerSec} MB/s`,
+        });
+      }
+    };
+
+    // When upload finishes, switch stage to server processing
+    xhr.upload.onload = () => {
+      if (onProgress) {
+        onProgress({
+          stage: 'processing',
+          percent: 100,
+          loadedMb: totalMb,
+          totalMb,
+        });
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const blob = xhr.response as Blob;
+        if (blob && blob.size > 0) {
+          lastYoloFailureTimestamp = 0; // Reset circuit breaker
+          resolve(URL.createObjectURL(blob));
+        } else {
+          reject(new Error('Inference server returned an empty video response.'));
+        }
+      } else {
+        lastYoloFailureTimestamp = Date.now();
+        const reader = new FileReader();
+        reader.onload = () => {
+          let errMsg = reader.result as string;
+          try {
+            const parsed = JSON.parse(errMsg);
+            if (parsed.detail) {
+              if (parsed.detail.includes('Could not open this video')) {
+                errMsg = 'OpenCV on the YOLO server could not decode this video container. Ensure your file is standard H.264 MP4, or use Instant Frame Timeline.';
+              } else {
+                errMsg = parsed.detail;
+              }
+            }
+          } catch {}
+          reject(new Error(errMsg || `Inference server returned HTTP status ${xhr.status}`));
+        };
+        reader.onerror = () => {
+          reject(new Error(`Inference server returned HTTP status ${xhr.status}`));
+        };
+        reader.readAsText(xhr.response);
+      }
+    };
+
+    xhr.onerror = () => {
+      lastYoloFailureTimestamp = Date.now();
+      reject(new Error('Network error connecting to YOLO video endpoint. Render server may be spinning up (~30-50s) or offline.'));
+    };
+
+    xhr.ontimeout = () => {
+      lastYoloFailureTimestamp = Date.now();
+      reject(new Error('Video inference request timed out. For large files, try using Instant Frame Timeline or a shorter clip.'));
+    };
+
+    xhr.timeout = 240000; // 4 minutes timeout
+
+    const formData = new FormData();
+    formData.append('file', videoFile, sanitizedName);
+    xhr.send(formData);
+  });
 }
 
 export const detector = {
@@ -71,6 +166,18 @@ export const detector = {
    * Video prediction helper referencing the main API endpoint
    */
   detectVideo,
+
+  /**
+   * Pre-warm Render server in the background
+   */
+  prewarmYoloServer(): void {
+    const url = this.getInferenceUrl();
+    if (!url) return;
+    try {
+      const cleanUrl = url.replace(/\/+$/, '');
+      fetch(`${cleanUrl}/health`, { method: 'GET', mode: 'no-cors' }).catch(() => {});
+    } catch {}
+  },
 
   /**
    * Get configured inference URL from localStorage or environment variable
@@ -160,7 +267,9 @@ export const detector = {
   async detect(imageBlob: Blob, conf: number = 0.4): Promise<DetectionResult> {
     const inferenceUrl = this.getInferenceUrl();
 
-    if (inferenceUrl) {
+    // Circuit breaker: If YOLO failed in the last 40 seconds, seamlessly route to Gemini vision
+    // This avoids blocking frame extraction or multiple sequential 12s freezes.
+    if (inferenceUrl && (Date.now() - lastYoloFailureTimestamp > 40000)) {
       return this.detectYOLOv8(imageBlob, conf, inferenceUrl);
     } else {
       return this.detectGemini(imageBlob, conf);
@@ -177,44 +286,36 @@ export const detector = {
     const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
     const endpoint = `${cleanBaseUrl}/detect?conf=${conf}`;
 
-    // Retry logic up to 2 attempts
-    let lastError: Error | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4500); // 4.5s snappy timeout
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          throw new Error(`YOLOv8 inference API responded with status ${response.status}`);
-        }
-
-        const data: DetectionResult = await response.json();
-        return {
-          ...data,
-          source: 'YOLOv8 API',
-        };
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`YOLOv8 API attempt ${attempt + 1} failed:`, err);
-        // Fallback to Gemini if second attempt fails
-        if (attempt === 1) {
-          console.info('Switching to Gemini vision fallback due to YOLOv8 connection issue');
-          const fallbackResult = await this.detectGemini(imageBlob, conf);
-          return {
-            ...fallbackResult,
-            warning: `YOLOv8 API unreachable (${err.message}). Fell back to Gemini vision.`,
-          };
-        }
+      if (!response.ok) {
+        throw new Error(`YOLOv8 inference API responded with status ${response.status}`);
       }
+
+      const data: DetectionResult = await response.json();
+      lastYoloFailureTimestamp = 0; // Success: reset circuit breaker
+      return {
+        ...data,
+        source: 'YOLOv8 API',
+      };
+    } catch (err: any) {
+      lastYoloFailureTimestamp = Date.now();
+      console.warn('YOLOv8 API error, seamlessly falling back to Gemini vision:', err.message);
+      const fallbackResult = await this.detectGemini(imageBlob, conf);
+      return {
+        ...fallbackResult,
+        warning: `YOLOv8 server was slow or unavailable (${err.message}). Instant fallback to Gemini vision applied.`,
+      };
     }
-    throw lastError || new Error('YOLOv8 detection failed');
   },
 
   /**

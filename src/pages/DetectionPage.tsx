@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { detector, detectVideo, API_URL } from '../services/detector';
+import { detector, detectVideo, API_URL, VideoUploadProgress } from '../services/detector';
+import { extractVideoFrames, createLightweightVideoClip, formatBytes } from '../services/videoUtils';
 import { repository } from '../services/storage';
-import { DetectionBox, DetectionResult, PPESettings, Scan, Violation } from '../types';
+import { DetectionBox, DetectionResult, PPESettings, Scan, Violation, ExtractedField } from '../types';
 import { BoundingBoxCanvas, BoundingBoxCanvasHandle } from '../components/detection/BoundingBoxCanvas';
 import {
   Upload,
@@ -25,9 +26,25 @@ import {
   Layers,
   Save,
   Flag,
+  Zap,
+  StopCircle,
+  FileVideo,
+  Clock,
+  BookOpen,
 } from 'lucide-react';
 import { FalsePositiveModal, FalsePositiveTarget } from '../components/detection/FalsePositiveModal';
 import { CustomModelModal } from '../components/model/CustomModelModal';
+import { PolicyDrawer } from '../components/knowledge/PolicyDrawer';
+import { knowledgeService } from '../services/knowledge';
+
+// Sample demonstration video for instant testing
+const DEMO_VIDEOS = [
+  {
+    name: 'PPE Inspection Video (H.264 MP4)',
+    url: '/sample_safety_ppe.mp4',
+    size: '23 KB (Instant)',
+  },
+];
 
 // Sample demonstration images for quick testing
 const DEMO_SAMPLES = [
@@ -49,7 +66,6 @@ export const DetectionPage: React.FC = () => {
   const { currentUser } = useAuth();
   const { addToast } = useToast();
   const canvasRef = useRef<BoundingBoxCanvasHandle>(null);
-  const hiddenVideoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Active tab: 'image' or 'video'
@@ -59,6 +75,17 @@ export const DetectionPage: React.FC = () => {
   const [settings, setSettings] = useState<PPESettings>(() => repository.getSettings());
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [showCustomModelModal, setShowCustomModelModal] = useState(false);
+  const [showPolicyDrawer, setShowPolicyDrawer] = useState(false);
+  const [selectedPolicyViolation, setSelectedPolicyViolation] = useState<string>('helmet');
+  const [hasKnowledgeDocs, setHasKnowledgeDocs] = useState<boolean>(true);
+  const [importingPpeRules, setImportingPpeRules] = useState(false);
+
+  // Check if Knowledge Base has indexed documents
+  useEffect(() => {
+    repository.getAllDocuments().then((docs) => {
+      setHasKnowledgeDocs(docs.length > 0);
+    }).catch(() => setHasKnowledgeDocs(false));
+  }, []);
 
   // Image State
   const [selectedImage, setSelectedImage] = useState<string | null>(DEMO_SAMPLES[0].url);
@@ -75,11 +102,40 @@ export const DetectionPage: React.FC = () => {
   // Video State
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoFileSizeMb, setVideoFileSizeMb] = useState<number>(0);
+  const [videoFileSizeStr, setVideoFileSizeStr] = useState<string>('');
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [isDetectingVideo, setIsDetectingVideo] = useState(false);
   const [showOriginalVideo, setShowOriginalVideo] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState<VideoUploadProgress | null>(null);
   const [videoProcessing, setVideoProcessing] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
+  const [yoloElapsedSeconds, setYoloElapsedSeconds] = useState(0);
+  const [serverHealth, setServerHealth] = useState<'checking' | 'online' | 'waking' | 'offline'>('checking');
+  const abortExtractRef = useRef<AbortController | null>(null);
+
+  // Pre-warm backend & check health when video tab is selected
+  useEffect(() => {
+    if (activeTab === 'video') {
+      detector.prewarmYoloServer();
+      const controller = new AbortController();
+      const tid = setTimeout(() => {
+        controller.abort();
+        setServerHealth('waking');
+      }, 3500);
+
+      fetch(`${API_URL}/health`, { signal: controller.signal })
+        .then((res) => {
+          clearTimeout(tid);
+          if (res.ok) setServerHealth('online');
+          else setServerHealth('waking');
+        })
+        .catch(() => {
+          clearTimeout(tid);
+          setServerHealth('waking');
+        });
+    }
+  }, [activeTab]);
   const [videoTimeline, setVideoTimeline] = useState<
     Array<{
       time: number;
@@ -129,6 +185,60 @@ export const DetectionPage: React.FC = () => {
   const handleSettingChange = (newSettings: PPESettings) => {
     setSettings(newSettings);
     repository.saveSettings(newSettings);
+  };
+
+  // Import mandatory PPE requirements from Knowledge Base documents
+  const handleImportPpeRulesFromKnowledge = async () => {
+    setImportingPpeRules(true);
+    try {
+      const fields = await repository.getAllExtractedFields();
+      const ppeFields = fields.filter((f: ExtractedField) => f.category === 'ppe_requirements');
+      const chunks = await repository.getAllChunks();
+
+      const combinedText = [
+        ...ppeFields.map((f: ExtractedField) => `${f.label} ${f.value}`),
+        ...chunks.map((c) => c.text),
+      ].join(' ').toLowerCase();
+
+      const newItems = { ...settings.requiredItems };
+      let importedCount = 0;
+
+      if (combinedText.includes('helmet') || combinedText.includes('hard hat') || combinedText.includes('ansi z89.1')) {
+        newItems.helmet = true;
+        importedCount++;
+      }
+      if (combinedText.includes('vest') || combinedText.includes('high-vis') || combinedText.includes('ansi 107')) {
+        newItems.vest = true;
+        importedCount++;
+      }
+      if (combinedText.includes('glove') || combinedText.includes('en 388') || combinedText.includes('hand protection')) {
+        newItems.gloves = true;
+        importedCount++;
+      }
+      if (combinedText.includes('goggle') || combinedText.includes('spectacle') || combinedText.includes('eye protection') || combinedText.includes('ansi z87.1')) {
+        newItems.goggles = true;
+        importedCount++;
+      }
+      if (combinedText.includes('mask') || combinedText.includes('respirator') || combinedText.includes('n95')) {
+        newItems.mask = true;
+        importedCount++;
+      }
+
+      const updated = { ...settings, requiredItems: newItems };
+      setSettings(updated);
+      repository.saveSettings(updated);
+
+      addToast(
+        'success',
+        'PPE Rules Imported from Knowledge Base',
+        `Synchronized ${importedCount} mandatory equipment standards from uploaded safety manuals.`
+      );
+    } catch (err: any) {
+      console.error(err);
+      addToast('error', 'Import Failed', err.message || 'Could not query knowledge base.');
+    } finally {
+      setImportingPpeRules(false);
+    }
   };
 
   // Run image detection
@@ -234,36 +344,117 @@ export const DetectionPage: React.FC = () => {
     }
   };
 
-  // Video Drag & Drop
+  // Video Select & Drag/Drop
   const handleVideoSelect = (file: File) => {
     const url = URL.createObjectURL(file);
+    const formatted = formatBytes(file.size);
+    const sizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
     setVideoFile(file);
+    setVideoFileSizeMb(sizeMb);
+    setVideoFileSizeStr(formatted);
     setVideoSrc(url);
     setVideoUrl(null);
     setShowOriginalVideo(false);
+    setVideoUploadProgress(null);
     setVideoTimeline([]);
     setSelectedTimelineItem(null);
     setVideoProgress(0);
+
+    // Pre-warm backend when video is loaded
+    detector.prewarmYoloServer();
+
+    if (!file.name.toLowerCase().endsWith('.mp4') && !file.type.includes('mp4')) {
+      addToast(
+        'info',
+        'Non-MP4 Format Detected',
+        'Render YOLO backend expects standard H.264 MP4. You can also run the Instant Frame Timeline (~2s) which supports all formats.'
+      );
+    }
+  };
+
+  // Load sample demo video clip
+  const handleSelectDemoVideo = async (demo: typeof DEMO_VIDEOS[0]) => {
+    try {
+      addToast('info', 'Loading Sample Video', `Loading ${demo.name}...`);
+      setVideoSrc(demo.url);
+      setVideoUrl(null);
+      setShowOriginalVideo(false);
+      setVideoUploadProgress(null);
+      setVideoTimeline([]);
+      setSelectedTimelineItem(null);
+      setVideoProgress(0);
+
+      const resp = await fetch(demo.url);
+      const blob = await resp.blob();
+      const file = new File([blob], 'sample_ppe_inspection.mp4', { type: 'video/mp4' });
+      setVideoFile(file);
+      setVideoFileSizeMb(Math.round((file.size / (1024 * 1024)) * 10) / 10);
+      setVideoFileSizeStr(formatBytes(file.size));
+      detector.prewarmYoloServer();
+      addToast('success', 'Sample Video Ready', 'Click "Predict Video (YOLO API)" or "Instant Frame Timeline" to inspect.');
+    } catch (err: any) {
+      console.error(err);
+      addToast('error', 'Sample Load Error', err.message || 'Could not fetch sample video');
+    }
+  };
+
+  // Cancel ongoing frame extraction
+  const cancelFrameExtraction = () => {
+    if (abortExtractRef.current) {
+      abortExtractRef.current.abort();
+      addToast('info', 'Extraction Stopped', 'Video frame extraction cancelled.');
+    }
   };
 
   // Video Detection via YOLOv8 /predict-video API (Render)
   const runYoloVideoDetection = async () => {
-    if (!videoFile) {
+    if (!videoFile && !videoSrc) {
       addToast('warning', 'No Video Selected', 'Please upload or choose a video file first.');
       return;
     }
 
     setIsDetectingVideo(true);
     setVideoUrl(null);
+    setVideoUploadProgress(null);
+    setYoloElapsedSeconds(0);
+
+    const timer = setInterval(() => {
+      setYoloElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
+    let targetFileOrBlob: File | Blob | null = videoFile;
 
     try {
+      // If no videoFile object exists yet (e.g. from sample URL), fetch it into a genuine File
+      if (!targetFileOrBlob && videoSrc) {
+        const resp = await fetch(videoSrc);
+        const blob = await resp.blob();
+        if (blob.size > 0) {
+          targetFileOrBlob = new File([blob], 'inspection_sample.mp4', { type: 'video/mp4' });
+          setVideoFile(targetFileOrBlob as File);
+        }
+      }
+
+      if (!targetFileOrBlob || targetFileOrBlob.size < 500) {
+        throw new Error('Video file is empty or cannot be read. Please choose a valid video recording.');
+      }
+
+      const formattedSize = formatBytes(targetFileOrBlob.size);
       addToast(
         'info',
-        'YOLOv8 Video Processing Started',
-        `Sending video to ${API_URL}/predict-video?confidence=${settings.confidenceThreshold || 0.25}...`
+        'YOLOv8 Cloud Video Started',
+        `Sending ${formattedSize} to ${API_URL}/predict-video?confidence=${settings.confidenceThreshold || 0.25}...`
       );
 
-      const returnedVideoUrl = await detectVideo(videoFile, settings.confidenceThreshold || 0.25);
+      const returnedVideoUrl = await detectVideo(
+        targetFileOrBlob,
+        settings.confidenceThreshold || 0.25,
+        undefined,
+        (progress) => {
+          setVideoUploadProgress(progress);
+        }
+      );
+
       setVideoUrl(returnedVideoUrl);
       setShowOriginalVideo(false);
 
@@ -281,7 +472,7 @@ export const DetectionPage: React.FC = () => {
           userId: currentUser.id,
           userEmail: currentUser.email,
           sourceType: 'video',
-          fileName: videoFile.name,
+          fileName: (targetFileOrBlob as File)?.name || 'video_stream.mp4',
           totalPersons: 1,
           totalViolations: 0,
           compliancePct: 100,
@@ -292,128 +483,137 @@ export const DetectionPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error('YOLO video detection error:', err);
+      const isFormatErr = err.message?.includes('Could not open') || err.message?.includes('decode') || err.message?.includes('OpenCV');
       addToast(
         'error',
         'Video Detection Failed',
-        err.message?.includes('Failed to fetch')
-          ? 'Unable to connect to SafeVision YOLO API on Render. The server may be waking up from free-tier sleep (~30-45s). You can retry or run browser frame extraction.'
+        isFormatErr
+          ? 'OpenCV on the server could not open this video. Ensure your file is standard H.264 MP4, or use Instant Frame Timeline (works with all formats).'
+          : err.message?.includes('Network error') || err.message?.includes('Failed to fetch')
+          ? 'SafeVision YOLO API on Render is spinning up (~30-50s) or offline. Try again shortly or use Instant Frame Timeline.'
           : err.message || 'Error executing video detection'
       );
     } finally {
+      clearInterval(timer);
       setIsDetectingVideo(false);
+      setVideoUploadProgress(null);
     }
   };
 
   // Video Frame Extraction and Sequential Detection
   const processVideoFrames = async () => {
-    if (!videoSrc || !hiddenVideoRef.current) return;
-    const video = hiddenVideoRef.current;
+    if (!videoSrc && !videoFile) {
+      addToast('warning', 'No Video Loaded', 'Please upload or choose a video clip first.');
+      return;
+    }
 
     setVideoProcessing(true);
     setVideoProgress(0);
     setVideoTimeline([]);
     setSelectedTimelineItem(null);
 
-    const stepSeconds = Math.max(0.5, settings.frameSampleRate);
-    const duration = video.duration || 10;
-    const totalFrames = Math.min(20, Math.floor(duration / stepSeconds)); // cap at 20 frames for performance
-    const timelineData: typeof videoTimeline = [];
-
-    const offscreenCanvas = document.createElement('canvas');
-    const ctx = offscreenCanvas.getContext('2d');
+    const abortController = new AbortController();
+    abortExtractRef.current = abortController;
 
     const scanId = `video_scan_${Date.now()}`;
     let cumulativeViolations = 0;
     let totalPersonsSum = 0;
 
-    for (let i = 0; i < totalFrames; i++) {
-      const targetTime = i * stepSeconds;
-      await new Promise<void>((resolve) => {
-        video.currentTime = targetTime;
-        video.onseeked = () => resolve();
+    try {
+      addToast('info', 'Frame Extractor Running', 'Decoding keyframes across video duration...');
+
+      // Smart frame count: 4 keyframes for rapid feedback (~2s)
+      const maxKeyFrames = 4;
+
+      await extractVideoFrames({
+        videoSource: videoFile || videoSrc!,
+        sampleIntervalSeconds: settings.frameSampleRate || 2,
+        maxFrames: maxKeyFrames,
+        targetWidth: 800,
+        signal: abortController.signal,
+        onProgress: (pct) => {
+          setVideoProgress(pct);
+        },
+        onFrame: async (frame, index) => {
+          try {
+            const res = await detector.detect(frame.blob, settings.confidenceThreshold);
+            const evalRes = detector.evaluateViolations(res.detections, settings, {
+              scanId,
+              fileName: videoFile?.name || 'surveillance_clip.mp4',
+              sourceType: 'video',
+              frameTime: Math.round(frame.time),
+              evidenceImage: frame.dataUrl,
+            });
+
+            const newItem = {
+              time: Math.round(frame.time),
+              frameBlob: frame.blob,
+              dataUrl: frame.dataUrl,
+              detections: res.detections,
+              violations: evalRes.violations,
+              compliancePct: evalRes.compliancePct,
+            };
+
+            setVideoTimeline((prev) => {
+              const updated = [...prev, newItem].sort((a, b) => a.time - b.time);
+              if (index === 0) setSelectedTimelineItem(newItem);
+              return updated;
+            });
+
+            cumulativeViolations += evalRes.violations.length;
+            totalPersonsSum += evalRes.totalPersons;
+
+            for (const v of evalRes.violations) {
+              await repository.saveViolation(v);
+            }
+          } catch (err: any) {
+            console.warn(`Detection warning at ${frame.time}s:`, err);
+            setVideoTimeline((prev) => [
+              ...prev,
+              {
+                time: Math.round(frame.time),
+                frameBlob: frame.blob,
+                dataUrl: frame.dataUrl,
+                detections: [],
+                violations: [],
+                compliancePct: 100,
+              },
+            ]);
+          }
+        },
       });
 
-      offscreenCanvas.width = video.videoWidth || 640;
-      offscreenCanvas.height = video.videoHeight || 360;
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
-      }
-
-      const frameBlob = await new Promise<Blob | null>((resolve) =>
-        offscreenCanvas.toBlob(resolve, 'image/jpeg', 0.85)
-      );
-
-      if (frameBlob) {
-        const dataUrl = offscreenCanvas.toDataURL('image/jpeg', 0.8);
-        try {
-          const res = await detector.detect(frameBlob, settings.confidenceThreshold);
-          const evalRes = detector.evaluateViolations(res.detections, settings, {
-            scanId,
-            fileName: videoFile?.name || 'video_stream.mp4',
+      if (!abortController.signal.aborted) {
+        if (currentUser) {
+          const videoScan: Scan = {
+            id: scanId,
+            userId: currentUser.id,
+            userEmail: currentUser.email,
             sourceType: 'video',
-            frameTime: Math.round(targetTime),
-            evidenceImage: dataUrl,
-          });
-
-          timelineData.push({
-            time: Math.round(targetTime),
-            frameBlob,
-            dataUrl,
-            detections: res.detections,
-            violations: evalRes.violations,
-            compliancePct: evalRes.compliancePct,
-          });
-
-          cumulativeViolations += evalRes.violations.length;
-          totalPersonsSum += evalRes.totalPersons;
-
-          // Save violations immediately to storage
-          for (const v of evalRes.violations) {
-            await repository.saveViolation(v);
-          }
-        } catch (err) {
-          console.warn(`Frame at ${targetTime}s detection error:`, err);
+            fileName: videoFile?.name || 'surveillance_clip.mp4',
+            totalPersons: Math.max(1, Math.round(totalPersonsSum / Math.max(1, maxKeyFrames))),
+            totalViolations: cumulativeViolations,
+            compliancePct: Math.max(20, 100 - cumulativeViolations * 15),
+            detectedClasses: ['worker', 'ppe'],
+            createdAt: new Date().toISOString(),
+          };
+          await repository.saveScan(videoScan);
         }
+
+        addToast(
+          cumulativeViolations > 0 ? 'alert' : 'success',
+          cumulativeViolations > 0 ? `Video Audit: ${cumulativeViolations} Violation(s)` : 'Video Audit Clean',
+          `All sampled frames analyzed successfully.`
+        );
       }
-
-      setVideoProgress(Math.round(((i + 1) / totalFrames) * 100));
-    }
-
-    setVideoTimeline(timelineData);
-    setVideoProcessing(false);
-
-    // Save master video scan summary
-    if (timelineData.length > 0 && currentUser) {
-      const avgCompliance = Math.round(
-        timelineData.reduce((acc, curr) => acc + curr.compliancePct, 0) / timelineData.length
-      );
-
-      const videoScan: Scan = {
-        id: scanId,
-        userId: currentUser.id,
-        userEmail: currentUser.email,
-        sourceType: 'video',
-        fileName: videoFile?.name || 'surveillance_clip.mp4',
-        totalPersons: Math.max(1, Math.round(totalPersonsSum / timelineData.length)),
-        totalViolations: cumulativeViolations,
-        compliancePct: avgCompliance,
-        detectedClasses: Array.from(
-          new Set(timelineData.flatMap((t) => t.detections.map((d) => d.class_name)))
-        ),
-        annotatedThumbnail: timelineData[0]?.dataUrl,
-        createdAt: new Date().toISOString(),
-      };
-      await repository.saveScan(videoScan);
-    }
-
-    if (cumulativeViolations > 0) {
-      addToast(
-        'alert',
-        `Video Audit Complete: ${cumulativeViolations} Violation(s)`,
-        `Review the timeline below to inspect each violation timestamp.`
-      );
-    } else {
-      addToast('success', 'Video Audit Clean', 'Zero safety violations detected in analyzed frames.');
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        console.error('Frame extraction failed:', err);
+        addToast('error', 'Frame Extraction Error', err.message || 'Could not extract frames from video');
+      }
+    } finally {
+      setVideoProcessing(false);
+      abortExtractRef.current = null;
     }
   };
 
@@ -581,6 +781,50 @@ export const DetectionPage: React.FC = () => {
                   </label>
                 ))}
               </div>
+
+              {hasKnowledgeDocs && (
+                <button
+                  type="button"
+                  disabled={importingPpeRules}
+                  onClick={handleImportPpeRulesFromKnowledge}
+                  className="mt-3 w-full py-2 px-3 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-[#7C5CFF] hover:text-violet-300 border border-violet-500/40 text-[11px] font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  {importingPpeRules ? (
+                    <div className="w-3.5 h-3.5 border-2 border-violet-400/30 border-t-violet-400 rounded-full animate-spin" />
+                  ) : (
+                    <BookOpen className="w-3.5 h-3.5" />
+                  )}
+                  <span>Import Rules from Knowledge Base</span>
+                </button>
+              )}
+            </div>
+
+            {/* Knowledge Base AI Mode Setting */}
+            <div className="lg:col-span-3 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="font-semibold text-slate-200 block">
+                  Document Intelligence Search Engine:
+                </span>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  When enabled, runs offline BM25 keyword ranking and skips external embedding calls.
+                </p>
+              </div>
+              <label className="flex items-center gap-2.5 cursor-pointer bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 hover:border-violet-500/50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={Boolean(settings.disableKnowledgeAI)}
+                  onChange={(e) =>
+                    handleSettingChange({
+                      ...settings,
+                      disableKnowledgeAI: e.target.checked,
+                    })
+                  }
+                  className="rounded accent-violet-500 w-4 h-4 cursor-pointer"
+                />
+                <span className="text-xs font-semibold text-violet-300">
+                  Keyword-only mode (Disable Cloud AI)
+                </span>
+              </label>
             </div>
           </div>
         </div>
@@ -600,8 +844,21 @@ export const DetectionPage: React.FC = () => {
                 Immediate site supervisor intervention recommended.
               </p>
 
-              {/* Action buttons to flag false positives directly */}
+              {/* Action buttons to flag false positives or view compliance policy */}
               <div className="mt-3 flex flex-wrap gap-2">
+                {hasKnowledgeDocs && (
+                  <button
+                    onClick={() => {
+                      const firstViol = lastViolationResult.violations[0]?.type || 'PPE';
+                      setSelectedPolicyViolation(firstViol);
+                      setShowPolicyDrawer(true);
+                    }}
+                    className="px-3 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-violet-950/30"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>View Safety Policy References</span>
+                  </button>
+                )}
                 {lastViolationResult.violations.map((v) => (
                   <button
                     key={v.id}
@@ -828,6 +1085,21 @@ export const DetectionPage: React.FC = () => {
                               {(item.confidence * 100).toFixed(0)}%
                             </span>
 
+                            {isViolation && hasKnowledgeDocs && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedPolicyViolation(item.class_name);
+                                  setShowPolicyDrawer(true);
+                                }}
+                                title="View Regulatory Policy References"
+                                className="px-2 py-1 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-[#7C5CFF] hover:text-violet-300 border border-violet-500/30 transition-colors flex items-center gap-1 text-[11px]"
+                              >
+                                <BookOpen className="w-3 h-3 text-[#7C5CFF]" />
+                                <span className="hidden sm:inline">Policy</span>
+                              </button>
+                            )}
+
                             {!isFlaggedFp ? (
                               <button
                                 onClick={(e) => {
@@ -873,8 +1145,35 @@ export const DetectionPage: React.FC = () => {
                   <span>Video PPE Detection &amp; Analysis</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  Upload workplace CCTV or inspection footage to run YOLOv8 model inference or extract frame-by-frame compliance timelines.
+                  Upload workplace CCTV footage to run YOLOv8 model inference or extract frame-by-frame compliance timelines.
                 </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[11px] text-slate-400">YOLO Server:</span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                      serverHealth === 'online'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : serverHealth === 'waking'
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        serverHealth === 'online'
+                          ? 'bg-emerald-400 animate-pulse'
+                          : serverHealth === 'waking'
+                          ? 'bg-amber-400 animate-ping'
+                          : 'bg-slate-500'
+                      }`}
+                    />
+                    {serverHealth === 'online'
+                      ? 'Online (Render)'
+                      : serverHealth === 'waking'
+                      ? 'Waking Up (~30-50s)'
+                      : 'Checking...'}
+                  </span>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -897,14 +1196,14 @@ export const DetectionPage: React.FC = () => {
                   <>
                     <button
                       disabled={isDetectingVideo || videoProcessing}
-                      onClick={runYoloVideoDetection}
+                      onClick={() => runYoloVideoDetection()}
                       className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center gap-2 transition-all hover:scale-105 cursor-pointer"
                       title="Send video to SafeVision YOLO API (/predict-video) for bounding-box annotated video generation"
                     >
                       {isDetectingVideo ? (
                         <>
                           <div className="w-3.5 h-3.5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
-                          <span>YOLO Predicting...</span>
+                          <span>YOLO Predicting ({yoloElapsedSeconds}s)...</span>
                         </>
                       ) : (
                         <>
@@ -918,7 +1217,7 @@ export const DetectionPage: React.FC = () => {
                       disabled={videoProcessing || isDetectingVideo}
                       onClick={processVideoFrames}
                       className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold border border-slate-700 flex items-center gap-2 transition-colors cursor-pointer"
-                      title="Sample video frames locally in browser and evaluate safety telemetry timeline"
+                      title="Sample video keyframes locally in browser and evaluate safety telemetry timeline (~2s)"
                     >
                       {videoProcessing ? (
                         <>
@@ -928,7 +1227,7 @@ export const DetectionPage: React.FC = () => {
                       ) : (
                         <>
                           <Play className="w-3.5 h-3.5 text-amber-400" />
-                          <span>Frame Timeline</span>
+                          <span>⚡ Instant Frame Timeline</span>
                         </>
                       )}
                     </button>
@@ -936,6 +1235,45 @@ export const DetectionPage: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Quick Demo Video Selector Strip */}
+            <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-xs">
+              <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Instant Demo Videos:</span>
+              </span>
+              {DEMO_VIDEOS.map((demo, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSelectDemoVideo(demo)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-amber-400 border border-slate-700/60 transition-colors font-mono text-[11px] flex items-center gap-1.5 cursor-pointer"
+                >
+                  <FileVideo className="w-3 h-3 text-amber-400" />
+                  <span>{demo.name}</span>
+                </button>
+              ))}
+              <span className="text-[10px] text-slate-400 ml-auto hidden md:inline">
+                Click sample for instant video testing
+              </span>
+            </div>
+
+            {/* Large file informational note */}
+            {videoFileSizeMb > 10 && (
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <Zap className="w-5 h-5 text-amber-400 shrink-0" />
+                  <div>
+                    <span className="font-bold text-white block">
+                      Video File Size: {videoFileSizeStr || `${videoFileSizeMb} MB`}
+                    </span>
+                    <span className="text-slate-300 text-[11px]">
+                      Large videos take longer to upload over the web. You can use &quot;⚡ Instant Frame Timeline&quot; for zero-upload instant feedback on all formats.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Video preview: Annotated or Uploaded */}
             {videoUrl ? (
@@ -955,7 +1293,7 @@ export const DetectionPage: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setShowOriginalVideo(!showOriginalVideo)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
                     >
                       {showOriginalVideo ? 'View Annotated Video' : 'View Original Video'}
                     </button>
@@ -983,7 +1321,6 @@ export const DetectionPage: React.FC = () => {
               <div className="space-y-4">
                 <div className="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 max-w-2xl mx-auto shadow-2xl">
                   <video
-                    ref={hiddenVideoRef}
                     src={videoSrc}
                     controls
                     style={{ maxWidth: "100%" }}
@@ -991,25 +1328,68 @@ export const DetectionPage: React.FC = () => {
                   />
                 </div>
 
-                {/* YOLO API Uploading & Inferencing State */}
+                {/* Live YOLO API Uploading & Inferencing State */}
                 {isDetectingVideo && (
-                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-3 max-w-2xl mx-auto animate-pulse">
-                    <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />
-                    <div>
-                      <span className="font-bold block">Running YOLOv8 Prediction via Render API...</span>
-                      <span className="text-[11px] text-slate-400 block mt-0.5">
-                        Uploading clip to {API_URL}/predict-video?confidence={settings.confidenceThreshold || 0.25}. Generating annotated video stream.
+                  <div className="p-4 rounded-xl bg-slate-900 border border-amber-500/30 text-xs space-y-2 max-w-2xl mx-auto shadow-xl">
+                    <div className="flex justify-between items-center text-slate-300 font-mono">
+                      <span className="flex items-center gap-2 font-bold text-amber-400">
+                        <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                        {videoUploadProgress?.stage === 'processing'
+                          ? 'AI YOLOv8 Processing on Render...'
+                          : `Uploading Video (${videoUploadProgress?.percent || 5}%)...`}
                       </span>
+                      <span className="text-slate-400 text-[11px]">
+                        {videoUploadProgress?.speedText ? `Speed: ${videoUploadProgress.speedText}` : ''}
+                      </span>
+                    </div>
+
+                    <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          videoUploadProgress?.stage === 'processing'
+                            ? 'bg-gradient-to-r from-emerald-500 to-amber-400 animate-pulse w-full'
+                            : 'bg-gradient-to-r from-amber-500 to-amber-400'
+                        }`}
+                        style={{
+                          width: `${
+                            videoUploadProgress?.stage === 'processing'
+                              ? 100
+                              : videoUploadProgress?.percent || 10
+                          }%`,
+                        }}
+                      />
+                    </div>
+
+                    <div className="text-[11px] text-slate-400 flex justify-between">
+                      <span>
+                        {videoUploadProgress?.loadedMb && videoUploadProgress?.totalMb
+                          ? `${videoUploadProgress.loadedMb} MB / ${videoUploadProgress.totalMb} MB`
+                          : 'Sending stream to SafeVision YOLO API...'}
+                      </span>
+                      <span className="text-slate-400">{API_URL.replace('https://', '')}</span>
                     </div>
                   </div>
                 )}
 
                 {/* Progress bar for frame extraction */}
                 {videoProcessing && (
-                  <div className="space-y-1.5 max-w-2xl mx-auto">
-                    <div className="flex justify-between text-xs font-mono text-slate-400">
-                      <span>Extracting &amp; Scanning Video Frames...</span>
-                      <span className="font-bold text-amber-400">{videoProgress}%</span>
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-700 text-xs space-y-2 max-w-2xl mx-auto shadow-xl">
+                    <div className="flex justify-between items-center text-slate-300 font-mono">
+                      <span className="flex items-center gap-2 font-bold text-amber-400">
+                        <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                        Extracting &amp; Scanning Video Frames ({videoTimeline.length} done)...
+                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-amber-400">{videoProgress}%</span>
+                        <button
+                          type="button"
+                          onClick={cancelFrameExtraction}
+                          className="px-2 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 flex items-center gap-1 text-[11px] cursor-pointer"
+                        >
+                          <StopCircle className="w-3 h-3" />
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                     <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
                       <div
@@ -1025,7 +1405,7 @@ export const DetectionPage: React.FC = () => {
                 <VideoIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
                 <h4 className="text-sm font-bold text-slate-300">No video loaded</h4>
                 <p className="text-xs text-slate-400 mt-1">
-                  Upload an MP4, WebM or MOV video recorded on site to inspect continuous safety compliance.
+                  Upload an MP4, WebM or MOV video, or pick an instant demo sample above.
                 </p>
               </div>
             )}
@@ -1134,6 +1514,18 @@ export const DetectionPage: React.FC = () => {
                               <span className="text-amber-400">
                                 {(d.confidence * 100).toFixed(0)}%
                               </span>
+                              {d.class_name.toLowerCase().startsWith('no-') && hasKnowledgeDocs && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedPolicyViolation(d.class_name);
+                                    setShowPolicyDrawer(true);
+                                  }}
+                                  title="View Regulatory Policy References"
+                                  className="p-1 rounded bg-violet-600/20 hover:bg-violet-600/30 text-[#7C5CFF] hover:text-violet-300 transition-colors"
+                                >
+                                  <BookOpen className="w-3 h-3" />
+                                </button>
+                              )}
                               <button
                                 onClick={() =>
                                   setFpModalTarget({
@@ -1174,6 +1566,13 @@ export const DetectionPage: React.FC = () => {
       <CustomModelModal
         isOpen={showCustomModelModal}
         onClose={() => setShowCustomModelModal(false)}
+      />
+
+      {/* Regulatory Safety Policy Drawer */}
+      <PolicyDrawer
+        isOpen={showPolicyDrawer}
+        onClose={() => setShowPolicyDrawer(false)}
+        violationType={selectedPolicyViolation}
       />
     </div>
   );

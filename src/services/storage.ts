@@ -1,4 +1,14 @@
-import { Scan, Violation, PPESettings, FalsePositiveFeedback } from '../types';
+import {
+  Scan,
+  Violation,
+  PPESettings,
+  FalsePositiveFeedback,
+  KnowledgeDocument,
+  DocumentChunk,
+  ExtractedField,
+  SearchHistoryItem,
+  ReviewStatus,
+} from '../types';
 import { idbGetAll, idbPut, idbDelete, idbGet, idbClear } from './db';
 
 const SETTINGS_KEY = 'safevision_ppe_settings';
@@ -329,5 +339,206 @@ export const repository = {
     }
 
     return { scansCount: newScans.length, violationsCount: newViolations.length };
+  },
+
+  // ==========================================
+  // KNOWLEDGE BASE (Document Intelligence)
+  // ==========================================
+  async getAllDocuments(): Promise<KnowledgeDocument[]> {
+    try {
+      const docs = await idbGetAll<KnowledgeDocument>('documents');
+      return docs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } catch (err) {
+      console.warn('IDB get documents error:', err);
+      const raw = localStorage.getItem('safevision_docs_fallback');
+      return raw ? JSON.parse(raw) : [];
+    }
+  },
+
+  async getDocumentById(id: string): Promise<KnowledgeDocument | undefined> {
+    try {
+      return await idbGet<KnowledgeDocument>('documents', id);
+    } catch {
+      const all = await this.getAllDocuments();
+      return all.find((d) => d.id === id);
+    }
+  },
+
+  async saveDocument(doc: KnowledgeDocument): Promise<void> {
+    try {
+      await idbPut('documents', doc);
+    } catch (err) {
+      console.warn('IDB put document failed:', err);
+    }
+  },
+
+  async deleteDocument(id: string): Promise<void> {
+    try {
+      await idbDelete('documents', id);
+      await idbDelete('documentBlobs', id);
+
+      // Delete associated chunks
+      const allChunks = await this.getAllChunks();
+      for (const c of allChunks) {
+        if (c.docId === id) {
+          await idbDelete('chunks', c.id);
+        }
+      }
+
+      // Delete associated extracted fields
+      const allFields = await this.getAllExtractedFields();
+      for (const f of allFields) {
+        if (f.docId === id) {
+          await idbDelete('extractedFields', f.id);
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting document:', err);
+    }
+  },
+
+  async getAllChunks(): Promise<DocumentChunk[]> {
+    try {
+      return await idbGetAll<DocumentChunk>('chunks');
+    } catch (err) {
+      console.warn('IDB get chunks error:', err);
+      return [];
+    }
+  },
+
+  async getChunksByDocId(docId: string): Promise<DocumentChunk[]> {
+    try {
+      const all = await this.getAllChunks();
+      return all.filter((c) => c.docId === docId);
+    } catch {
+      return [];
+    }
+  },
+
+  async saveChunks(chunks: DocumentChunk[]): Promise<void> {
+    for (const chunk of chunks) {
+      try {
+        await idbPut('chunks', chunk);
+      } catch (err) {
+        console.warn('IDB put chunk error:', err);
+      }
+    }
+  },
+
+  async getAllExtractedFields(): Promise<ExtractedField[]> {
+    try {
+      return await idbGetAll<ExtractedField>('extractedFields');
+    } catch (err) {
+      console.warn('IDB get extractedFields error:', err);
+      return [];
+    }
+  },
+
+  async getExtractedFieldsByDocId(docId: string): Promise<ExtractedField[]> {
+    try {
+      const all = await this.getAllExtractedFields();
+      return all.filter((f) => f.docId === docId);
+    } catch {
+      return [];
+    }
+  },
+
+  async saveExtractedField(field: ExtractedField): Promise<void> {
+    try {
+      await idbPut('extractedFields', field);
+    } catch (err) {
+      console.warn('IDB put field error:', err);
+    }
+  },
+
+  async saveExtractedFields(fields: ExtractedField[]): Promise<void> {
+    for (const f of fields) {
+      try {
+        await idbPut('extractedFields', f);
+      } catch (err) {
+        console.warn('IDB put field error:', err);
+      }
+    }
+  },
+
+  async updateExtractedFieldReview(id: string, status: ReviewStatus, value?: string): Promise<void> {
+    try {
+      const field = await idbGet<ExtractedField>('extractedFields', id);
+      if (field) {
+        field.reviewStatus = status;
+        if (value !== undefined) {
+          field.value = value;
+        }
+        await idbPut('extractedFields', field);
+      }
+    } catch (err) {
+      console.warn('Update review status failed:', err);
+    }
+  },
+
+  async getSearchHistory(limit = 5): Promise<SearchHistoryItem[]> {
+    try {
+      const items = await idbGetAll<SearchHistoryItem>('searchHistory');
+      return items
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, limit);
+    } catch {
+      return [];
+    }
+  },
+
+  async addSearchHistory(item: SearchHistoryItem): Promise<void> {
+    try {
+      await idbPut('searchHistory', item);
+    } catch {}
+  },
+
+  async clearSearchHistory(): Promise<void> {
+    try {
+      await idbClear('searchHistory');
+    } catch {}
+  },
+
+  async saveDocumentBlob(docId: string, mimeType: string, data: string | ArrayBuffer): Promise<void> {
+    try {
+      await idbPut('documentBlobs', { id: docId, docId, mimeType, data });
+    } catch (err) {
+      console.warn('Save document blob error:', err);
+    }
+  },
+
+  async getDocumentBlob(docId: string): Promise<{ mimeType: string; data: string | ArrayBuffer } | undefined> {
+    try {
+      return await idbGet<{ id: string; docId: string; mimeType: string; data: string | ArrayBuffer }>('documentBlobs', docId);
+    } catch {
+      return undefined;
+    }
+  },
+
+  async getKnowledgeStats(): Promise<{
+    docCount: number;
+    chunkCount: number;
+    extractedCount: number;
+    reviewRatePct: number | null;
+  }> {
+    const docs = await this.getAllDocuments();
+    const chunks = await this.getAllChunks();
+    const fields = await this.getAllExtractedFields();
+
+    const reviewedFields = fields.filter((f) => f.reviewStatus !== 'unreviewed');
+    const confirmedFields = fields.filter((f) => f.reviewStatus === 'confirmed');
+
+    // Show "n/a" until at least 5 reviews as instructed
+    const reviewRatePct =
+      reviewedFields.length >= 5
+        ? Math.round((confirmedFields.length / reviewedFields.length) * 100)
+        : null;
+
+    return {
+      docCount: docs.length,
+      chunkCount: chunks.length,
+      extractedCount: fields.length,
+      reviewRatePct,
+    };
   },
 };

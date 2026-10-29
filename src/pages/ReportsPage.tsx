@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { repository } from '../services/storage';
-import { Scan, Violation } from '../types';
+import { Scan, Violation, SearchResultItem } from '../types';
 import { useToast } from '../context/ToastContext';
+import { knowledgeService } from '../services/knowledge';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
@@ -18,6 +19,8 @@ import {
   AlertTriangle,
   Lightbulb,
   CheckCircle2,
+  BookOpen,
+  ExternalLink,
 } from 'lucide-react';
 
 export const ReportsPage: React.FC = () => {
@@ -38,9 +41,10 @@ export const ReportsPage: React.FC = () => {
     return new Date().toISOString().split('T')[0];
   });
 
-  // AI Summary state
+  // AI Summary & Policy Citations state
   const [aiLoading, setAiLoading] = useState(false);
   const [aiReport, setAiReport] = useState<{ summary: string; recommendations: string[] } | null>(null);
+  const [policyCitations, setPolicyCitations] = useState<SearchResultItem[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
 
   useEffect(() => {
@@ -108,7 +112,20 @@ export const ReportsPage: React.FC = () => {
 
       const data = await res.json();
       setAiReport(data);
-      addToast('success', 'AI Analysis Complete', 'Executive safety briefing generated.');
+
+      // Query Knowledge Base for grounding policy citations
+      try {
+        const topViolTypes = Object.keys(violationCounts);
+        const ppeQuery = topViolTypes.length > 0
+          ? `${topViolTypes.join(' ')} mandatory safety standard PPE protocol`
+          : 'OSHA 1926 PPE mandatory compliance requirements';
+        const hits = await knowledgeService.hybridSearch(ppeQuery);
+        setPolicyCitations(hits.slice(0, 3));
+      } catch (e) {
+        console.warn('Could not query knowledge citations for report:', e);
+      }
+
+      addToast('success', 'AI Analysis Complete', 'Executive safety briefing and policy citations generated.');
     } catch (err: any) {
       console.error(err);
       addToast('error', 'AI Summary Failed', err.message || 'Could not reach model.');
@@ -293,6 +310,36 @@ export const ReportsPage: React.FC = () => {
               ))}
             </div>
           </div>
+
+          {/* Grounded Knowledge Base Policy Citations */}
+          {policyCitations.length > 0 && (
+            <div className="space-y-2 pt-3 border-t border-slate-800">
+              <div className="text-xs font-bold text-violet-300 uppercase tracking-wider flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 text-[#7C5CFF]" />
+                <span>Knowledge Base Safety Policy Citations &amp; Grounding:</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                {policyCitations.map((cit, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-violet-950/20 border border-violet-500/30 text-xs text-slate-300 space-y-1.5"
+                  >
+                    <div className="font-bold text-white text-[11px] truncate flex items-center justify-between">
+                      <span className="truncate">{cit.doc.fileName}</span>
+                      {cit.chunk.page && (
+                        <span className="text-[10px] text-violet-400 font-mono">
+                          p. {cit.chunk.page}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-300 line-clamp-3 leading-relaxed">
+                      &ldquo;{cit.snippet}&rdquo;
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -457,6 +504,36 @@ export const ReportsPage: React.FC = () => {
             ))}
           </div>
         </div>
+
+        {/* Regulatory Policy Citations Section */}
+        {policyCitations.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-violet-400" />
+              <span>3. Regulatory Policy Citations &amp; Grounding</span>
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {policyCitations.map((cit, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 space-y-1"
+                >
+                  <div className="font-bold text-white text-[11px] truncate flex items-center justify-between">
+                    <span className="truncate">{cit.doc.fileName}</span>
+                    {cit.chunk.page && (
+                      <span className="text-[10px] text-violet-400 font-mono">
+                        Page {cit.chunk.page}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-relaxed italic line-clamp-3">
+                    &ldquo;{cit.snippet}&rdquo;
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Sign-off footer */}
         <div className="pt-6 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-slate-500 font-mono gap-4">
