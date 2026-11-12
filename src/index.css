@@ -1,12 +1,84 @@
 @import "tailwindcss";
 
+@theme {
+  /* =========================================================================
+     DARK MODE PALETTE (Default)
+     Soft midnight slate surfaces with rich, high-contrast, non-glare accents
+     ========================================================================= */
+  --color-slate-950: #0e131b;
+  --color-slate-900: #141b26;
+  --color-slate-850: #1a2230;
+  --color-slate-800: #232d3d;
+  --color-slate-750: #2c384c;
+  --color-slate-700: #3b485d;
+  --color-slate-600: #54647b;
+  --color-slate-500: #748398;
+  --color-slate-400: #9aa8bc;
+  --color-slate-300: #cad4e2;
+  --color-slate-200: #e2e8f0;
+  --color-slate-100: #f1f5f9;
+
+  /* Honey Amber (Visible, warm, soft safety primary) */
+  --color-amber-300: #fde047;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-amber-950: #2b1b0e;
+
+  /* Coral Terracotta Rose (Clear, non-blinding alert for violations) */
+  --color-rose-300: #fca5a5;
+  --color-rose-400: #f87171;
+  --color-rose-500: #ef4444;
+  --color-rose-600: #dc2626;
+  --color-rose-700: #b91c1c;
+  --color-rose-900: #421318;
+  --color-rose-950: #2a1215;
+
+  --color-red-300: #fca5a5;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-red-950: #2a1215;
+
+  /* Sage & Forest Emerald (Clear natural compliance green) */
+  --color-emerald-300: #86efac;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-emerald-950: #0e2619;
+
+  /* Sky & Ocean Blue */
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-cyan-400: #38bdf8;
+  --color-cyan-500: #0ea5e9;
+
+  /* Lilac Violet (Document Intelligence & Knowledge Base) */
+  --color-violet-300: #c4b5fd;
+  --color-violet-400: #a78bfa;
+  --color-violet-500: #8b5cf6;
+  --color-violet-600: #7c3aed;
+  --color-violet-950: #1e1635;
+
+  --color-purple-300: #d8b4fe;
+  --color-purple-400: #c084fc;
+  --color-purple-500: #a855f7;
+  --color-purple-950: #221638;
+}
+
 @layer base {
   * {
     border-color: var(--color-slate-800);
   }
   
   body {
+    background-color: var(--color-slate-950);
+    color: var(--color-slate-100);
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   code, pre, .font-mono {
@@ -14,7 +86,133 @@
   }
 }
 
-/* Custom dark scrollbar */
+/* =========================================================================
+   LIGHT MODE PALETTE
+   Calibrated for high contrast and crystal-clear readability on light surfaces
+   ========================================================================= */
+html.light {
+  color-scheme: light;
+
+  /* Surfaces & Insets */
+  --color-slate-950: #f8fafc; /* Canvas background: clean, gentle off-white */
+  --color-slate-900: #ffffff; /* Card surface: pure clean white */
+  --color-slate-850: #f1f5f9; /* Card inset & active pills */
+  --color-slate-800: #e2e8f0; /* Crisp borders */
+  --color-slate-750: #cbd5e1; /* Active/hover borders */
+  --color-slate-700: #94a3b8;
+  
+  /* Text & Labels (Dark slate for maximum readability) */
+  --color-slate-600: #475569;
+  --color-slate-500: #334155;
+  --color-slate-400: #334155; /* Secondary text: readable dark charcoal */
+  --color-slate-300: #1e293b; /* Strong text */
+  --color-slate-200: #0f172a; /* Bold text */
+  --color-slate-100: #0f172a; /* Primary text */
+
+  /* High-contrast Honey Amber in light mode */
+  --color-amber-300: #92400e;
+  --color-amber-400: #b45309; /* Rich amber text */
+  --color-amber-500: #d97706; /* Solid amber buttons */
+  --color-amber-600: #b45309;
+  --color-amber-700: #78350f;
+  --color-amber-950: #fef3c7; /* Soft amber pill background */
+
+  /* High-contrast Crimson / Rose for violations in light mode */
+  --color-rose-300: #991b1b;
+  --color-rose-400: #dc2626; /* Rich red text */
+  --color-rose-500: #b91c1c; /* Solid crimson */
+  --color-rose-600: #991b1b;
+  --color-rose-700: #7f1d1d;
+  --color-rose-900: #fecaca;
+  --color-rose-950: #fee2e2; /* Soft rose alert background */
+
+  --color-red-300: #991b1b;
+  --color-red-400: #dc2626;
+  --color-red-500: #b91c1c;
+  --color-red-600: #991b1b;
+  --color-red-700: #7f1d1d;
+  --color-red-950: #fee2e2;
+
+  /* High-contrast Forest Emerald for compliance in light mode */
+  --color-emerald-300: #065f46;
+  --color-emerald-400: #059669; /* Rich green text */
+  --color-emerald-500: #047857; /* Solid emerald */
+  --color-emerald-600: #065f46;
+  --color-emerald-950: #d1fae5; /* Soft mint pill background */
+
+  /* Blue & Cyan */
+  --color-blue-400: #1d4ed8;
+  --color-blue-500: #2563eb;
+  --color-blue-600: #1e40af;
+  --color-cyan-400: #0369a1;
+  --color-cyan-500: #0284c7;
+
+  /* Violet & Purple in light mode */
+  --color-violet-300: #5b21b6;
+  --color-violet-400: #6d28d9;
+  --color-violet-500: #7c3aed;
+  --color-violet-600: #6d28d9;
+  --color-violet-950: #ede9fe; /* Soft lavender pill background */
+
+  --color-purple-300: #6b21a8;
+  --color-purple-400: #7e22ce;
+  --color-purple-500: #9333ea;
+  --color-purple-950: #f3e8ff;
+}
+
+/* Light mode base borders and shadows */
+html.light * {
+  border-color: #e2e8f0;
+}
+
+html.light body {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+/* Ensure text-white converts to deep dark charcoal on white cards in Light Mode */
+html.light .text-white {
+  color: #0f172a;
+}
+
+/* BUT keep white text on dark solid colored buttons and pills in light mode */
+html.light [class*="bg-violet-600"],
+html.light [class*="bg-indigo-600"],
+html.light [class*="bg-blue-600"],
+html.light [class*="bg-rose-600"],
+html.light [class*="bg-emerald-600"],
+html.light [class*="bg-red-600"],
+html.light [class*="bg-violet-600"] .text-white,
+html.light [class*="bg-indigo-600"] .text-white,
+html.light [class*="bg-blue-600"] .text-white,
+html.light [class*="bg-rose-600"] .text-white,
+html.light [class*="bg-emerald-600"] .text-white,
+html.light [class*="bg-red-600"] .text-white,
+html.light button[class*="bg-violet-600"],
+html.light button[class*="bg-blue-600"],
+html.light button[class*="bg-rose-600"],
+html.light button[class*="bg-emerald-600"] {
+  color: #ffffff !important;
+}
+
+/* Amber buttons & badges ALWAYS have clear dark text in BOTH dark & light mode */
+.text-slate-950,
+html.light .text-slate-950,
+html.dark .text-slate-950,
+html.light [class*="bg-amber-500"] .text-slate-950,
+html.dark [class*="bg-amber-500"] .text-slate-950,
+html.light [class*="bg-amber-400"] .text-slate-950,
+html.dark [class*="bg-amber-400"] .text-slate-950 {
+  color: #0f172a !important;
+}
+
+/* Light mode card shadows for clear, elegant depth */
+html.light .shadow-xl,
+html.light .shadow-2xl {
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+}
+
+/* Scrollbars for light & dark mode */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -33,10 +231,22 @@
   background: rgba(245, 158, 11, 0.6);
 }
 
+html.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 /* Print styling for PDF export */
 @media print {
   body {
-    background: #090d16 !important;
-    color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
   }
 }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { repository } from '../services/storage';
-import { Violation } from '../types';
+import { Violation, Incident } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import {
@@ -21,6 +22,9 @@ import {
   RotateCcw,
   CheckCircle2,
   BookOpen,
+  Bot,
+  Workflow,
+  ArrowRight,
 } from 'lucide-react';
 import { FalsePositiveModal, FalsePositiveTarget } from '../components/detection/FalsePositiveModal';
 import { PolicyDrawer } from '../components/knowledge/PolicyDrawer';
@@ -28,8 +32,16 @@ import { PolicyDrawer } from '../components/knowledge/PolicyDrawer';
 export const AlertsPage: React.FC = () => {
   const { isAdmin } = useAuth();
   const { addToast } = useToast();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Active Tab: violations vs incidents
+  const [activeTab, setActiveTab] = useState<'violations' | 'incidents'>(
+    searchParams.get('tab') === 'incidents' ? 'incidents' : 'violations'
+  );
 
   const [violations, setViolations] = useState<Violation[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Search & Filter
@@ -37,6 +49,8 @@ export const AlertsPage: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'false_positive'>('all');
+  const [incidentSeverityFilter, setIncidentSeverityFilter] = useState<string>('all');
+  const [incidentStatusFilter, setIncidentStatusFilter] = useState<string>('all');
 
   // Policy Reference Drawer State
   const [showPolicyDrawer, setShowPolicyDrawer] = useState(false);
@@ -64,7 +78,39 @@ export const AlertsPage: React.FC = () => {
 
   useEffect(() => {
     loadViolations();
+    loadIncidents();
   }, []);
+
+  const loadIncidents = async () => {
+    try {
+      const data = await repository.getAllIncidents();
+      setIncidents(data);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUpdateIncidentStatus = async (id: string, status: Incident['status']) => {
+    await repository.updateIncidentStatus(id, status);
+    setIncidents((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
+    addToast('success', 'Incident Updated', `Status changed to ${status}`);
+  };
+
+  const handleInvestigateIncident = (inc: Incident) => {
+    navigate(
+      `/assistant?prompt=${encodeURIComponent(
+        `Investigate Incident #${inc.incidentNumber} (${inc.title}) in Zone ${inc.zone || 'Site'} and provide remediation advice.`
+      )}`
+    );
+  };
+
+  const handleInvestigateViolation = (v: Violation) => {
+    navigate(
+      `/assistant?prompt=${encodeURIComponent(
+        `Investigate ${v.type} violation on ${v.fileName}${v.zone ? ` in Zone ${v.zone}` : ''} (${v.cameraId || 'CCTV'}). Explain policy infractions and suggest corrective actions.`
+      )}`
+    );
+  };
 
   const loadViolations = async () => {
     setLoading(true);
@@ -144,29 +190,63 @@ export const AlertsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Tab Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
             <BellRing className="w-6 h-6 text-rose-400" />
-            <span>Alert History &amp; Violation Registry</span>
+            <span>Alert History &amp; Safety Records</span>
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Inspect individual PPE infraction evidence frames, examine confidence telemetry, and maintain audit logs.
+            Inspect individual PPE infraction frames, manage active safety incidents, and examine audit logs.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* Tab Switcher */}
+          <div className="flex p-1 bg-slate-900 border border-slate-800 rounded-xl">
+            <button
+              onClick={() => {
+                setActiveTab('violations');
+                setSearchParams({ tab: 'violations' });
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'violations'
+                  ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <BellRing className="w-3.5 h-3.5" />
+              <span>Violations ({violations.length})</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('incidents');
+                setSearchParams({ tab: 'incidents' });
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                activeTab === 'incidents'
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Workflow className="w-3.5 h-3.5" />
+              <span>Incidents ({incidents.filter((i) => i.status === 'open').length} Open)</span>
+            </button>
+          </div>
+
           {!isAdmin && (
-            <span className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="hidden md:flex px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] text-slate-400 items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-amber-400" />
-              <span>Supervisor Mode (Read-only deletion)</span>
+              <span>Supervisor Mode</span>
             </span>
           )}
         </div>
       </div>
 
-      {/* Filter Toolbar */}
+      {activeTab === 'violations' ? (
+        <>
+          {/* Filter Toolbar */}
       <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs shadow-lg">
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative">
@@ -393,7 +473,7 @@ export const AlertsPage: React.FC = () => {
                               setShowPolicyDrawer(true);
                             }}
                             title="View Safety Policy Reference"
-                            className="p-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-[#7C5CFF] hover:text-violet-300 transition-colors"
+                            className="p-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 hover:text-violet-300 transition-colors"
                           >
                             <BookOpen className="w-3.5 h-3.5" />
                           </button>
@@ -450,6 +530,172 @@ export const AlertsPage: React.FC = () => {
           </div>
         )}
       </div>
+        </>
+      ) : (
+        /* Incident Management View */
+        <div className="space-y-4">
+          {/* Incidents Filter Toolbar */}
+          <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs shadow-lg">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Search incidents, zones, titles..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 w-56 sm:w-64"
+                />
+              </div>
+
+              <select
+                value={incidentSeverityFilter}
+                onChange={(e) => setIncidentSeverityFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-amber-500"
+              >
+                <option value="all">All Severities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+
+              <select
+                value={incidentStatusFilter}
+                onChange={(e) => setIncidentStatusFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-amber-500"
+              >
+                <option value="all">All Statuses ({incidents.length})</option>
+                <option value="open">Open ({incidents.filter((i) => i.status === 'open').length})</option>
+                <option value="investigating">Investigating ({incidents.filter((i) => i.status === 'investigating').length})</option>
+                <option value="resolved">Resolved ({incidents.filter((i) => i.status === 'resolved').length})</option>
+              </select>
+            </div>
+
+            <div className="text-xs font-mono text-slate-400">
+              Total Incidents: <span className="text-amber-400 font-bold">{incidents.length}</span> (
+              <span className="text-rose-400 font-bold">{incidents.filter((i) => i.status === 'open').length}</span> Open)
+            </div>
+          </div>
+
+          {/* Incidents Cards List */}
+          <div className="space-y-3">
+            {incidents.length === 0 ? (
+              <div className="p-12 text-center rounded-2xl bg-slate-900/40 border border-slate-800 space-y-2">
+                <Workflow className="w-10 h-10 text-slate-600 mx-auto" />
+                <h4 className="text-sm font-semibold text-slate-300">No Safety Incidents Recorded</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Incidents are auto-logged by the SafeVision Agent or created by safety leads during audits.
+                </p>
+              </div>
+            ) : (
+              incidents
+                .filter((inc) => {
+                  const q = searchQuery.toLowerCase();
+                  const matchesSearch =
+                    (inc.title || '').toLowerCase().includes(q) ||
+                    (inc.summary || '').toLowerCase().includes(q) ||
+                    String(inc.incidentNumber).includes(q) ||
+                    (inc.zone && inc.zone.toLowerCase().includes(q));
+                  const matchesSeverity = incidentSeverityFilter === 'all' || inc.severity === incidentSeverityFilter;
+                  const matchesStatus = incidentStatusFilter === 'all' || inc.status === incidentStatusFilter;
+                  return matchesSearch && matchesSeverity && matchesStatus;
+                })
+                .map((inc) => (
+                  <div
+                    key={inc.id}
+                    className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700/80 transition-all shadow-md space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-xs font-black px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          #{inc.incidentNumber}
+                        </span>
+                        <div>
+                          <h3 className="text-sm font-bold text-slate-100">{inc.title}</h3>
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400 font-mono">
+                            <span>Zone {inc.zone || 'Site'}</span>
+                            <span>·</span>
+                            <span>{inc.cameraId || 'CCTV'}</span>
+                            <span>·</span>
+                            <span>{new Date(inc.createdAt).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Severity chip */}
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase font-mono ${
+                            inc.severity === 'critical'
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                              : inc.severity === 'high'
+                              ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              : inc.severity === 'medium'
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                          }`}
+                        >
+                          {inc.severity}
+                        </span>
+
+                        {/* Status select dropdown */}
+                        <select
+                          value={inc.status}
+                          onChange={(e) => handleUpdateIncidentStatus(inc.id, e.target.value as any)}
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-lg border focus:outline-none cursor-pointer ${
+                            inc.status === 'open'
+                              ? 'bg-rose-950/60 text-rose-300 border-rose-700/60'
+                              : inc.status === 'investigating'
+                              ? 'bg-amber-950/60 text-amber-300 border-amber-700/60'
+                              : 'bg-emerald-950/60 text-emerald-300 border-emerald-700/60'
+                          }`}
+                        >
+                          <option value="open">Open</option>
+                          <option value="investigating">Investigating</option>
+                          <option value="resolved">Resolved</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-300 leading-relaxed">{inc.summary}</p>
+
+                    {/* Policy Citations & Footer */}
+                    <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-slate-500 text-[11px]">Policy Cites:</span>
+                        {inc.policyCitations && inc.policyCitations.length > 0 ? (
+                          inc.policyCitations.map((cite, cIdx) => (
+                            <span
+                              key={cIdx}
+                              className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-950/40 text-purple-300 border border-purple-800/50"
+                            >
+                              {cite}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-slate-500 text-[11px] italic">Standard Site Safety Code</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleInvestigateIncident(inc)}
+                          className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                        >
+                          <Bot className="w-3.5 h-3.5" />
+                          <span>Investigate with Agent</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal with Full Annotated Evidence Image */}
       {activeModalViolation && (
@@ -573,7 +819,34 @@ export const AlertsPage: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    const target = activeModalViolation;
+                    setActiveModalViolation(null);
+                    handleInvestigateViolation(target);
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-purple-950/30"
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  <span>Investigate with Agent</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const target = activeModalViolation;
+                    setActiveModalViolation(null);
+                    navigate(
+                      `/reports?from=alert&zone=${target.zone || 'A'}&class=${encodeURIComponent(
+                        target.type
+                      )}`
+                    );
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-amber-950/20"
+                  title="Compile formal OSHA compliance report for this incident"
+                >
+                  <FileText className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Generate Incident Report</span>
+                </button>
                 {hasKnowledgeDocs && (
                   <button
                     onClick={() => {

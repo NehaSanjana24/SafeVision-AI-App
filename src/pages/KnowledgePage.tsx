@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { knowledgeService } from '../services/knowledge';
@@ -38,6 +39,7 @@ import {
 } from 'lucide-react';
 
 export const KnowledgePage: React.FC = () => {
+  const navigate = useNavigate();
   const { currentUser, isAdmin } = useAuth();
   const { addToast } = useToast();
 
@@ -130,7 +132,23 @@ export const KnowledgePage: React.FC = () => {
     try {
       const docs = await repository.getAllDocuments();
       setDocuments(docs);
-      if (docs.length > 0 && !selectedDocId) {
+
+      const params = new URLSearchParams(window.location.search);
+      const urlDocId = params.get('docId');
+      const urlChunkId = params.get('chunkId');
+
+      if (urlDocId && docs.some((d) => d.id === urlDocId)) {
+        setSelectedDocId(urlDocId);
+        setMobileTab('viewer');
+        if (urlChunkId) {
+          const allChunks = await repository.getAllChunks();
+          const targetChunk = allChunks.find((c) => c.id === urlChunkId);
+          if (targetChunk) {
+            setHighlightPassage(targetChunk.text.slice(0, 100));
+            setTargetLocation({ page: targetChunk.page, row: targetChunk.row, sheet: targetChunk.sheet });
+          }
+        }
+      } else if (docs.length > 0 && !selectedDocId) {
         setSelectedDocId(docs[0].id);
       }
       const st = await repository.getKnowledgeStats();
@@ -402,7 +420,7 @@ export const KnowledgePage: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-[#7C5CFF] flex items-center justify-center shadow-lg shadow-violet-950/20">
+              <div className="w-10 h-10 rounded-2xl bg-violet-500/15 border border-violet-500/25 text-violet-400 flex items-center justify-center shadow-md shadow-violet-950/20">
                 <BookOpen className="w-5 h-5" />
               </div>
               <div>
@@ -410,7 +428,7 @@ export const KnowledgePage: React.FC = () => {
                   <h1 className="text-xl font-black tracking-tight text-white">
                     Document Intelligence &amp; Knowledge Base
                   </h1>
-                  <span className="px-2 py-0.5 rounded-full bg-violet-500/20 text-[#7C5CFF] border border-violet-500/30 text-[10px] font-mono font-bold">
+                  <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/25 text-[10px] font-mono font-bold">
                     HYBRID RAG
                   </span>
                 </div>
@@ -437,7 +455,7 @@ export const KnowledgePage: React.FC = () => {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="px-4 py-2 rounded-xl bg-[#7C5CFF] hover:bg-[#6b47ff] text-white text-xs font-bold shadow-lg shadow-violet-950/40 flex items-center gap-2 transition-all hover:scale-105 cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 rounded-xl bg-violet-600/90 hover:bg-violet-500 text-white text-xs font-bold shadow-md shadow-violet-950/30 flex items-center gap-2 transition-all hover:scale-105 cursor-pointer disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />
               <span>+ Add Documents</span>
@@ -517,7 +535,7 @@ export const KnowledgePage: React.FC = () => {
         {/* Privacy Note with Keyword-Only Toggle */}
         <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-400">
           <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-[#7C5CFF] shrink-0" />
+            <Info className="w-4 h-4 text-violet-400 shrink-0" />
             <span>
               <strong className="text-slate-300">Privacy Notice:</strong> Document text is sent to Gemini for embeddings and extraction.
             </span>
@@ -527,7 +545,7 @@ export const KnowledgePage: React.FC = () => {
               type="checkbox"
               checked={disableAI}
               onChange={(e) => handleToggleDisableAI(e.target.checked)}
-              className="rounded bg-slate-900 border-slate-700 text-[#7C5CFF] focus:ring-violet-500"
+              className="rounded bg-slate-900 border-slate-700 text-violet-400 focus:ring-violet-500"
             />
             <span className="text-[11px]">Keyword-only mode (Disable Cloud AI)</span>
           </label>
@@ -539,7 +557,7 @@ export const KnowledgePage: React.FC = () => {
         <button
           onClick={() => setMobileTab('files')}
           className={`flex-1 py-2 text-xs font-bold rounded-xl transition-colors ${
-            mobileTab === 'files' ? 'bg-[#7C5CFF] text-white' : 'text-slate-400'
+            mobileTab === 'files' ? 'bg-violet-600 text-white' : 'text-slate-400'
           }`}
         >
           Files ({documents.length})
@@ -547,7 +565,7 @@ export const KnowledgePage: React.FC = () => {
         <button
           onClick={() => setMobileTab('viewer')}
           className={`flex-1 py-2 text-xs font-bold rounded-xl transition-colors ${
-            mobileTab === 'viewer' ? 'bg-[#7C5CFF] text-white' : 'text-slate-400'
+            mobileTab === 'viewer' ? 'bg-violet-600 text-white' : 'text-slate-400'
           }`}
         >
           Viewer &amp; Policies
@@ -569,7 +587,7 @@ export const KnowledgePage: React.FC = () => {
               </span>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="text-xs font-bold text-[#7C5CFF] hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-violet-400 hover:text-violet-300 hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add</span>
@@ -588,9 +606,9 @@ export const KnowledgePage: React.FC = () => {
                 if (e.dataTransfer.files) handleFileUpload(e.dataTransfer.files);
               }}
               onClick={() => fileInputRef.current?.click()}
-              className="p-5 border-2 border-dashed border-violet-500/30 hover:border-violet-500/60 bg-violet-950/10 hover:bg-violet-950/20 rounded-2xl text-center cursor-pointer transition-all group"
+              className="p-5 border-2 border-dashed border-violet-500/25 hover:border-violet-500/50 bg-violet-950/10 hover:bg-violet-950/20 rounded-2xl text-center cursor-pointer transition-all group"
             >
-              <Upload className="w-6 h-6 text-[#7C5CFF] mx-auto mb-2 group-hover:scale-110 transition-transform" />
+              <Upload className="w-6 h-6 text-violet-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
               <p className="text-xs font-bold text-white">Drop files to index</p>
               <p className="text-[10px] text-slate-400 mt-0.5">
                 PDF, DOCX, CSV, XLSX, TXT, Images (Max 25MB)
@@ -632,7 +650,7 @@ export const KnowledgePage: React.FC = () => {
                       }}
                       className={`relative p-3.5 rounded-xl border text-xs transition-all cursor-pointer group ${
                         isSelected
-                          ? 'border-[#7C5CFF] bg-violet-950/20 shadow-lg shadow-violet-950/30 ring-1 ring-[#7C5CFF]/50'
+                          ? 'border-violet-500/70 bg-violet-950/25 shadow-md shadow-violet-950/30 ring-1 ring-violet-500/30'
                           : 'border-slate-800/80 bg-slate-950/70 hover:bg-slate-900/70 hover:border-slate-700'
                       }`}
                     >
@@ -673,6 +691,20 @@ export const KnowledgePage: React.FC = () => {
                               onClick={(e) => e.stopPropagation()}
                               className="absolute right-0 top-full mt-1 w-40 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl py-1.5 z-30 font-medium text-xs text-slate-200"
                             >
+                              <button
+                                onClick={() => {
+                                  navigate(
+                                    `/assistant?prompt=${encodeURIComponent(
+                                      `What does ${doc.fileName} mandate regarding PPE equipment and safety compliance rules?`
+                                    )}`
+                                  );
+                                  setMenuOpenDocId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-left hover:bg-slate-800 flex items-center gap-2 text-purple-300 font-semibold"
+                              >
+                                <Bot className="w-3.5 h-3.5 text-purple-400" />
+                                <span>Ask the Agent</span>
+                              </button>
                               <button
                                 onClick={() => {
                                   setSelectedDocId(doc.id);
@@ -790,7 +822,7 @@ export const KnowledgePage: React.FC = () => {
           {/* SEARCH BAR (Debounced 300ms, '/' focuses, Esc clears) */}
           <div className="relative z-30">
             <div className="relative flex items-center">
-              <Search className="w-4 h-4 text-[#7C5CFF] absolute left-4 pointer-events-none" />
+              <Search className="w-4 h-4 text-violet-400 absolute left-4 pointer-events-none" />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -800,7 +832,7 @@ export const KnowledgePage: React.FC = () => {
                 }}
                 onChange={(e) => handleQueryChange(e.target.value)}
                 placeholder="Search knowledge base... (Press '/' to focus)"
-                className="w-full pl-11 pr-24 py-3 rounded-2xl bg-slate-900/90 border border-slate-800 focus:border-[#7C5CFF] focus:ring-2 focus:ring-[#7C5CFF]/30 text-xs text-white placeholder-slate-500 transition-all shadow-xl focus:outline-none"
+                className="w-full pl-11 pr-24 py-3 rounded-2xl bg-slate-900/90 border border-slate-800 focus:border-violet-500/80 focus:ring-2 focus:ring-violet-500/20 text-xs text-white placeholder-slate-500 transition-all shadow-xl focus:outline-none"
               />
               <div className="absolute right-3 flex items-center gap-1.5">
                 {searchQuery && (
@@ -892,7 +924,7 @@ export const KnowledgePage: React.FC = () => {
               </button>
               <button
                 onClick={handleRenameDocument}
-                className="px-4 py-1.5 rounded-xl bg-[#7C5CFF] text-white text-xs font-bold"
+                className="px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-colors"
               >
                 Save
               </button>

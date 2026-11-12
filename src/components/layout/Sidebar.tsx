@@ -7,10 +7,12 @@ import {
   FileText,
   BellRing,
   BookOpen,
+  Bot,
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
   AlertTriangle,
+  BrainCircuit,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -25,8 +27,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { to: '/', label: 'Home', icon: Home, exact: true },
     { to: '/detect', label: 'PPE Detection', icon: ScanEye },
     { to: '/dashboard', label: 'Command Center', icon: LayoutDashboard },
+    { to: '/intelligence', label: 'Intelligence', icon: BrainCircuit },
     { to: '/reports', label: 'Safety Reports', icon: FileText },
     { to: '/knowledge', label: 'Knowledge Base', icon: BookOpen },
+    { to: '/assistant', label: 'Assistant', icon: Bot },
     { to: '/alerts', label: 'Alert History', icon: BellRing, badge: alertsCount },
   ];
 

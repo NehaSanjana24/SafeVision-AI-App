@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { detector, detectVideo, API_URL, VideoUploadProgress } from '../services/detector';
@@ -31,10 +32,14 @@ import {
   FileVideo,
   Clock,
   BookOpen,
+  Bot,
+  BarChart2,
+  Workflow,
 } from 'lucide-react';
 import { FalsePositiveModal, FalsePositiveTarget } from '../components/detection/FalsePositiveModal';
 import { CustomModelModal } from '../components/model/CustomModelModal';
 import { PolicyDrawer } from '../components/knowledge/PolicyDrawer';
+import { RAGEvalModal } from '../components/settings/RAGEvalModal';
 import { knowledgeService } from '../services/knowledge';
 
 // Sample demonstration video for instant testing
@@ -63,6 +68,7 @@ const DEMO_SAMPLES = [
 ];
 
 export const DetectionPage: React.FC = () => {
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { addToast } = useToast();
   const canvasRef = useRef<BoundingBoxCanvasHandle>(null);
@@ -76,6 +82,7 @@ export const DetectionPage: React.FC = () => {
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [showCustomModelModal, setShowCustomModelModal] = useState(false);
   const [showPolicyDrawer, setShowPolicyDrawer] = useState(false);
+  const [showRAGEvalModal, setShowRAGEvalModal] = useState(false);
   const [selectedPolicyViolation, setSelectedPolicyViolation] = useState<string>('helmet');
   const [hasKnowledgeDocs, setHasKnowledgeDocs] = useState<boolean>(true);
   const [importingPpeRules, setImportingPpeRules] = useState(false);
@@ -787,7 +794,7 @@ export const DetectionPage: React.FC = () => {
                   type="button"
                   disabled={importingPpeRules}
                   onClick={handleImportPpeRulesFromKnowledge}
-                  className="mt-3 w-full py-2 px-3 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-[#7C5CFF] hover:text-violet-300 border border-violet-500/40 text-[11px] font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="mt-3 w-full py-2 px-3 rounded-xl bg-violet-600/15 hover:bg-violet-600/25 text-violet-300 hover:text-violet-200 border border-violet-500/30 text-[11px] font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   {importingPpeRules ? (
                     <div className="w-3.5 h-3.5 border-2 border-violet-400/30 border-t-violet-400 rounded-full animate-spin" />
@@ -826,15 +833,115 @@ export const DetectionPage: React.FC = () => {
                 </span>
               </label>
             </div>
+
+            {/* Agent Assistant & Workflow Escalation Settings */}
+            <div className="lg:col-span-3 pt-4 border-t border-slate-800/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-purple-400" />
+                  <span className="font-bold text-slate-200 text-xs uppercase tracking-wider">
+                    Agent Assistant &amp; Workflow Escalations
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRAGEvalModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors shadow-sm cursor-pointer"
+                >
+                  <BarChart2 className="w-3.5 h-3.5" />
+                  <span>RAG Benchmark (12 Golden Questions)</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    Agent Name
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.agentName || 'SafeVision Agent'}
+                    onChange={(e) =>
+                      handleSettingChange({
+                        ...settings,
+                        agentName: e.target.value,
+                      })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    Supervisor Email
+                  </label>
+                  <input
+                    type="email"
+                    value={settings.supervisorEmail || 'safety.lead@safevision.ai'}
+                    onChange={(e) =>
+                      handleSettingChange({
+                        ...settings,
+                        supervisorEmail: e.target.value,
+                      })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    Alert Webhook URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://hooks.slack.com/... or https://..."
+                    value={settings.alertWebhookUrl || ''}
+                    onChange={(e) =>
+                      handleSettingChange({
+                        ...settings,
+                        alertWebhookUrl: e.target.value,
+                      })
+                    }
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+                <span className="text-[11px] text-slate-400">
+                  Require human supervisor authorization before dispatching external alerts:
+                </span>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.requireAlertApproval !== false}
+                    onChange={(e) =>
+                      handleSettingChange({
+                        ...settings,
+                        requireAlertApproval: e.target.checked,
+                      })
+                    }
+                    className="rounded accent-purple-500 w-4 h-4 cursor-pointer"
+                  />
+                  <span className="text-xs font-semibold text-purple-300">
+                    Approval Gate Active
+                  </span>
+                </label>
+              </div>
+
+              <div className="text-[10px] text-slate-500 italic">
+                * Note: Browser-side API keys and webhook settings are stored in local browser storage for demonstration purposes. A backend server proxy is recommended for production deployments.
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Active Red Violation Alert Banner */}
       {lastViolationResult && lastViolationResult.violations.length > 0 && (
-        <div className="p-4 rounded-2xl bg-rose-950/80 border-2 border-rose-500/70 text-rose-100 shadow-xl shadow-rose-950/40 flex flex-col sm:flex-row sm:items-start justify-between gap-4 animate-in fade-in">
+        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/35 text-rose-100 shadow-lg shadow-rose-950/20 flex flex-col sm:flex-row sm:items-start justify-between gap-4 animate-in fade-in">
           <div className="flex items-start gap-3 flex-1">
-            <ShieldAlert className="w-6 h-6 text-rose-400 shrink-0 mt-0.5 animate-bounce" />
+            <ShieldAlert className="w-6 h-6 text-rose-400 shrink-0 mt-0.5 animate-pulse" />
             <div>
               <h3 className="font-extrabold text-base text-rose-200">
                 CRITICAL SAFETY VIOLATION FLAGGED ({lastViolationResult.violations.length})
@@ -846,6 +953,20 @@ export const DetectionPage: React.FC = () => {
 
               {/* Action buttons to flag false positives or view compliance policy */}
               <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate(
+                      `/assistant?prompt=${encodeURIComponent(
+                        `Investigate ${lastViolationResult.violations.map((v) => v.type).join(', ')} violations detected on ${imageFile?.name || 'inspected photo'} and summarize relevant safety policy.`
+                      )}`
+                    );
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-purple-950/20 cursor-pointer"
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  <span>Investigate with Agent</span>
+                </button>
                 {hasKnowledgeDocs && (
                   <button
                     onClick={() => {
@@ -853,7 +974,7 @@ export const DetectionPage: React.FC = () => {
                       setSelectedPolicyViolation(firstViol);
                       setShowPolicyDrawer(true);
                     }}
-                    className="px-3 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-violet-950/30"
+                    className="px-3 py-1.5 rounded-lg bg-violet-600/90 hover:bg-violet-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-violet-950/20 cursor-pointer"
                   >
                     <BookOpen className="w-3.5 h-3.5" />
                     <span>View Safety Policy References</span>
@@ -873,7 +994,7 @@ export const DetectionPage: React.FC = () => {
                         bbox: v.bbox,
                       })
                     }
-                    className="px-2.5 py-1 rounded-lg bg-rose-900/80 hover:bg-rose-900 border border-rose-700/80 text-rose-200 text-[11px] font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                    className="px-2.5 py-1.5 rounded-lg bg-rose-900/40 hover:bg-rose-900/60 border border-rose-700/50 text-rose-200 text-[11px] font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
                   >
                     <Flag className="w-3.5 h-3.5 text-amber-400" />
                     <span>Flag &ldquo;{v.type}&rdquo; as False Positive</span>
@@ -883,7 +1004,7 @@ export const DetectionPage: React.FC = () => {
             </div>
           </div>
           <div className="shrink-0 text-right">
-            <span className="text-xs uppercase font-mono font-bold px-2.5 py-1 rounded-md bg-rose-900 border border-rose-700 text-rose-200">
+            <span className="text-xs uppercase font-mono font-bold px-2.5 py-1 rounded-md bg-rose-950/60 border border-rose-700/50 text-rose-200">
               Compliance: {lastViolationResult.compliancePct}%
             </span>
           </div>
@@ -1093,9 +1214,9 @@ export const DetectionPage: React.FC = () => {
                                   setShowPolicyDrawer(true);
                                 }}
                                 title="View Regulatory Policy References"
-                                className="px-2 py-1 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-[#7C5CFF] hover:text-violet-300 border border-violet-500/30 transition-colors flex items-center gap-1 text-[11px]"
+                                className="px-2 py-1 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 hover:text-violet-300 border border-violet-500/25 transition-colors flex items-center gap-1 text-[11px]"
                               >
-                                <BookOpen className="w-3 h-3 text-[#7C5CFF]" />
+                                <BookOpen className="w-3 h-3 text-violet-400" />
                                 <span className="hidden sm:inline">Policy</span>
                               </button>
                             )}
@@ -1521,7 +1642,7 @@ export const DetectionPage: React.FC = () => {
                                     setShowPolicyDrawer(true);
                                   }}
                                   title="View Regulatory Policy References"
-                                  className="p-1 rounded bg-violet-600/20 hover:bg-violet-600/30 text-[#7C5CFF] hover:text-violet-300 transition-colors"
+                                  className="p-1 rounded bg-violet-600/15 hover:bg-violet-600/25 text-violet-400 hover:text-violet-300 transition-colors"
                                 >
                                   <BookOpen className="w-3 h-3" />
                                 </button>
@@ -1573,6 +1694,12 @@ export const DetectionPage: React.FC = () => {
         isOpen={showPolicyDrawer}
         onClose={() => setShowPolicyDrawer(false)}
         violationType={selectedPolicyViolation}
+      />
+
+      {/* RAG Retrieval & Grounding Evaluation Modal */}
+      <RAGEvalModal
+        isOpen={showRAGEvalModal}
+        onClose={() => setShowRAGEvalModal(false)}
       />
     </div>
   );

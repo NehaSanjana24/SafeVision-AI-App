@@ -1,4 +1,5 @@
 import { DetectionResult, DetectionBox, PPESettings, Violation } from '../types';
+import { getInferenceApiUrl } from '../utils/env';
 
 export interface DetectorOptions {
   conf?: number;
@@ -186,7 +187,8 @@ export const detector = {
     const custom = localStorage.getItem('safevision_custom_inference_url');
     if (custom === 'gemini') return null;
     if (custom && custom.trim()) return custom.trim();
-    if (import.meta.env.VITE_INFERENCE_API_URL) return import.meta.env.VITE_INFERENCE_API_URL;
+    const envUrl = getInferenceApiUrl();
+    if (envUrl) return envUrl;
     return API_URL;
   },
 
@@ -488,27 +490,27 @@ export const detector = {
     const getColor = (className: string) => {
       const cls = className.toLowerCase();
       if (cls.startsWith('no-') || cls.startsWith('missing') || cls.includes('without')) {
-        return { border: '#ef4444', fill: 'rgba(239, 68, 68, 0.22)', text: '#ffffff', tag: '#b91c1c' };
+        return { border: '#de6666', fill: 'rgba(222, 102, 102, 0.16)', text: '#ffffff', tag: '#b84747' };
       }
       if (cls.includes('helmet') || cls.includes('hardhat')) {
-        return { border: '#f59e0b', fill: 'rgba(245, 158, 11, 0.20)', text: '#000000', tag: '#f59e0b' };
+        return { border: '#e29547', fill: 'rgba(226, 149, 71, 0.16)', text: '#1e1610', tag: '#e29547' };
       }
       if (cls.includes('vest')) {
-        return { border: '#10b981', fill: 'rgba(16, 185, 129, 0.22)', text: '#ffffff', tag: '#059669' };
+        return { border: '#5db983', fill: 'rgba(93, 185, 131, 0.16)', text: '#ffffff', tag: '#439966' };
       }
       if (cls.includes('glove')) {
-        return { border: '#06b6d4', fill: 'rgba(6, 182, 212, 0.20)', text: '#ffffff', tag: '#0891b2' };
+        return { border: '#52b3c7', fill: 'rgba(82, 179, 199, 0.16)', text: '#ffffff', tag: '#3a95a8' };
       }
       if (cls.includes('goggle') || cls.includes('glass')) {
-        return { border: '#38bdf8', fill: 'rgba(56, 189, 248, 0.22)', text: '#ffffff', tag: '#0284c7' };
+        return { border: '#6aa8db', fill: 'rgba(106, 168, 219, 0.16)', text: '#ffffff', tag: '#4e8ec2' };
       }
       if (cls.includes('mask')) {
-        return { border: '#6366f1', fill: 'rgba(99, 102, 241, 0.20)', text: '#ffffff', tag: '#4f46e5' };
+        return { border: '#828fea', fill: 'rgba(130, 143, 234, 0.16)', text: '#ffffff', tag: '#6977d4' };
       }
       if (cls.includes('person') || cls.includes('worker')) {
-        return { border: '#8b5cf6', fill: 'rgba(139, 92, 246, 0.12)', text: '#ffffff', tag: '#7c3aed' };
+        return { border: '#9e85e6', fill: 'rgba(158, 133, 230, 0.10)', text: '#ffffff', tag: '#866ecb' };
       }
-      return { border: '#94a3b8', fill: 'rgba(148, 163, 184, 0.15)', text: '#ffffff', tag: '#475569' };
+      return { border: '#94a1b5', fill: 'rgba(148, 161, 181, 0.12)', text: '#ffffff', tag: '#516179' };
     };
 
     detections.forEach((item) => {
@@ -573,3 +575,5 @@ export const detector = {
     });
   },
 };
+
+export const detectorService = detector;

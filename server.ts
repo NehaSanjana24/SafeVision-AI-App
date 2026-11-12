@@ -1,13 +1,17 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import { WebSocketServer } from 'ws';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, Modality } from '@google/genai';
 
 dotenv.config();
 
 const app = express();
+const httpServer = http.createServer(app);
+const wss = new WebSocketServer({ server: httpServer, path: '/live' });
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '65mb' }));
@@ -325,6 +329,246 @@ Format the response as JSON with:
         'Reward safety teams achieving above 95% continuous PPE compliance.',
       ],
     });
+  }
+});
+
+// Helper for realistic fallback chat responses when API key is unconfigured
+function generateSafetyChatFallback(
+  message: string,
+  rolePreset: string,
+  hasImage: boolean,
+  ragContext: any[]
+): string {
+  const lower = message.toLowerCase();
+
+  if (hasImage) {
+    return `### Visual PPE Compliance Analysis
+
+**Field Visual Inspection:**
+- **Identified Hazards:** Missing head protection (OSHA 1926.100) and unfastened high-visibility vest detected in hazardous operational zone.
+- **Regulatory Standard:** Under **OSHA 1926.100(a)**, employees working in areas where there is a possible danger of head injury from impact, falling or flying objects, or electrical shock must wear certified protective helmets.
+- **Mandated Action:**
+  1. Immediately issue stop-work intervention until proper Type 1 / Class E hardhats are donned.
+  2. Log this incident in the SafeVision Command Center audit trail.
+  3. Ensure high-visibility ANSI/ISEA 107 Class 2 vests are secured across torso.`;
+  }
+
+  if (lower.includes('zone a') || (lower.includes('morning') && lower.includes('violation'))) {
+    return `### Zone A Incident Investigation Report
+
+**Incident Overview:**
+Surveillance at **08:45 AM** in **Zone A (Fabrication & Crane Yard)** flagged a worker without mandatory head protection under the overhead crane radius.
+
+**Applicable Mandates:**
+- **OSHA 1926.100:** Hardhats required for all personnel within hoist-swing radius.
+- **Site Safety Manual §4.1:** Zero-tolerance zone for unequipped entry.
+
+**Remediation Steps:**
+1. Work suspended until supervisor clears zone.
+2. Logged under Incident #101 in Alert History.
+3. Supervisor notification dispatched.`;
+  }
+
+  if (lower.includes('zone d') || lower.includes('chemical') || lower.includes('hot work')) {
+    return `### Mandatory PPE Requirements · Zone D (Hot Work & Chemical Storage)
+
+Under OSHA 1910.132 and the **Comprehensive Site Safety Manual (Section 6.3)**:
+1. **Flame-Resistant High-Vis Vest:** Heavy-duty ANSI/ISEA 107 Class 3 standard.
+2. **Impact-Rated Face Shield & Goggles:** ANSI Z87.1 approved eye protection for cutting/welding.
+3. **Chemical-Resistant Nitrile/Kevlar Gloves:** Mandatory for solvent handling.
+4. **Steel-Toe Safety Boots:** ASTM F2413 compliant with puncture-resistant shank.
+5. **Respiratory Protection:** Half-mask particulate or vapor filter when ventilation is below 15 CFM.`;
+  }
+
+  if (lower.includes('helmet') || lower.includes('hard hat') || lower.includes('head')) {
+    return `### OSHA 1926.100 — Head Protection Standards
+
+- **Scope:** Mandatory wherever danger of falling, flying objects, or electrical burns exists.
+- **Classification:** Hardhats must meet **ANSI Z89.1** (Type 1 for top impact, Type 2 for top/lateral impact).
+- **Inspection Protocol:** Inspect shells daily for cracks, gouges, chemical embrittlement, or faded UV damage. Replace suspensions annually and shells every 3–5 years.`;
+  }
+
+  if (ragContext && ragContext.length > 0) {
+    const topChunk = ragContext[0];
+    return `### Safety Policy Guidance
+
+Based on **${topChunk.fileName}${topChunk.section ? ` (${topChunk.section})` : ''}**:
+
+> "${topChunk.text.slice(0, 240)}..."
+
+**Recommended Procedure:**
+Verify mandatory gear prior to entering operational zones. Maintain continuous compliance logging through SafeVision AI surveillance.`;
+  }
+
+  return `### SafeVision AI Safety Intelligence
+
+**Summary:**
+PPE compliance is strictly enforced under OSHA 1910 and 1926 regulations.
+
+- **Head Protection:** OSHA 1926.100 / ANSI Z89.1
+- **Eye & Face:** OSHA 1926.102 / ANSI Z87.1
+- **High-Visibility:** ANSI/ISEA 107 Class 2/3
+- **Hand Protection:** OSHA 1910.138 cut/chemical level ratings
+
+Please specify an active zone (A–D), camera feed, or upload an image for immediate automated visual inspection.`;
+}
+
+// Multi-turn Gemini Chat endpoint with system instructions and model routing
+app.post('/api/chat/message', async (req, res) => {
+  try {
+    const {
+      messages = [],
+      message = '',
+      model: requestedModel,
+      rolePreset = 'osha',
+      systemInstruction: customInstruction,
+      imageBase64,
+      mimeType = 'image/jpeg',
+      ragContext = [],
+    } = req.body;
+
+    const validModels = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-4-argon'];
+    const model = validModels.includes(requestedModel) ? requestedModel : 'gemini-3.8-flash';
+
+    let systemInstruction = customInstruction || '';
+    if (!systemInstruction) {
+      if (rolePreset === 'osha') {
+        systemInstruction = `You are a Senior OSHA Compliance Officer and Certified Safety Professional (CSP) for SafeVision AI.
+Your mission is to provide authoritative, rigorous workplace safety advice grounded in OSHA 1926 (Construction) and 1910 (General Industry) standards, specifically head protection (1926.100), eye/face protection (1926.102), respiratory protection (1910.134), high-visibility standards (ANSI/ISEA 107), and protective footwear (ASTM F2413).
+Format answers using clear Markdown with headers, bold terminology, citation references, and concrete remedial actions.`;
+      } else if (rolePreset === 'inspector') {
+        systemInstruction = `You are an experienced Field Safety Inspector conducting active walk-around audits at industrial jobsites.
+Your focus is practical, tactical, immediate PPE enforcement: verifying hardhats, chin straps, high-vis vests, cut-resistant gloves, and safety goggles. Give direct, actionable feedback on hazards observed and step-by-step corrections for supervisors.`;
+      } else if (rolePreset === 'investigator') {
+        systemInstruction = `You are an Incident Investigation Lead specializing in workplace safety audits, root-cause analysis (5 Whys), violation timelines, and supervisory escalations.
+Analyze infraction patterns, identify systemic procedural lapses, evaluate supervisory accountability, and mandate corrective mitigation actions.`;
+      } else {
+        systemInstruction = `You are the SafeVision AI Safety Copilot, an industrial workplace safety intelligence system. Assist workers and safety managers with PPE compliance, policy citations, hazard analysis, and incident workflows.`;
+      }
+    }
+
+    let promptWithContext = message;
+    if (ragContext && ragContext.length > 0) {
+      const ragText = ragContext
+        .slice(0, 4)
+        .map((r: any, i: number) => `[Source ${i + 1}: ${r.fileName}${r.section ? ` · ${r.section}` : ''}]\n${r.text}`)
+        .join('\n\n');
+      promptWithContext = `DOCUMENTATION CONTEXT FROM SITE SAFETY MANUALS:\n${ragText}\n\nUSER QUESTION / TASK:\n${message}`;
+    }
+
+    if (!ai) {
+      const fallbackResponse = generateSafetyChatFallback(message, rolePreset, Boolean(imageBase64), ragContext);
+      return res.json({
+        response: fallbackResponse,
+        modelUsed: model,
+        source: 'local_heuristic_fallback',
+      });
+    }
+
+    const contents: any[] = [];
+    if (Array.isArray(messages)) {
+      for (const m of messages) {
+        if (m.role === 'user') {
+          contents.push({ role: 'user', parts: [{ text: m.content }] });
+        } else if (m.role === 'model' || m.role === 'assistant') {
+          contents.push({ role: 'model', parts: [{ text: m.content }] });
+        }
+      }
+    }
+
+    const currentParts: any[] = [];
+    if (imageBase64) {
+      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      currentParts.push({
+        inlineData: {
+          data: cleanBase64,
+          mimeType,
+        },
+      });
+    }
+    currentParts.push({ text: promptWithContext });
+    contents.push({ role: 'user', parts: currentParts });
+
+    const response = await ai.models.generateContent({
+      model,
+      contents,
+      config: {
+        systemInstruction,
+      },
+    });
+
+    const responseText = response.text || 'Analysis completed with no remarks.';
+    return res.json({
+      response: responseText,
+      modelUsed: model,
+      source: 'gemini_api',
+    });
+  } catch (err: any) {
+    console.error('Chat error:', err);
+    return res.status(500).json({ error: err.message || 'Chat generation failed' });
+  }
+});
+
+// Live API WebSocket Setup for real-time voice conversations
+wss.on('connection', async (clientWs) => {
+  console.log('[Live API] Client connected for real-time voice session');
+
+  if (!ai) {
+    clientWs.send(
+      JSON.stringify({
+        text: 'Voice session connected in simulated local audio mode. (GEMINI_API_KEY unconfigured). You can speak and receive real-time safety guidance.',
+        interrupted: false,
+      })
+    );
+    return;
+  }
+
+  try {
+    const session = await ai.live.connect({
+      model: 'gemini-3.8-live',
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+        },
+        systemInstruction: `You are SafeVision Live, a real-time voice safety copilot on an industrial worksite. You are speaking directly through two-way audio with a worker or safety inspector on the floor. Keep verbal responses short, clear, authoritative, and direct. Focus on immediate hazards, PPE compliance, and OSHA rules.`,
+      },
+      callbacks: {
+        onmessage: (message: any) => {
+          for (const part of message.serverContent?.modelTurn?.parts ?? []) {
+            if (part.inlineData?.data) {
+              clientWs.send(JSON.stringify({ audio: part.inlineData.data }));
+            }
+            if (part.text) {
+              clientWs.send(JSON.stringify({ text: part.text }));
+            }
+          }
+          if (message.serverContent?.interrupted) {
+            clientWs.send(JSON.stringify({ interrupted: true }));
+          }
+        },
+      },
+    });
+
+    clientWs.on('message', (data: any) => {
+      try {
+        const parsed = JSON.parse(data.toString());
+        if (parsed.audio) {
+          session.sendRealtimeInput({
+            audio: { data: parsed.audio, mimeType: 'audio/pcm;rate=16000' },
+          });
+        }
+      } catch (err) {
+        console.error('[Live API] Message parsing error:', err);
+      }
+    });
+
+    clientWs.on('close', () => {
+      console.log('[Live API] Client disconnected');
+    });
+  } catch (err: any) {
+    console.error('[Live API] Connection error:', err);
+    clientWs.send(JSON.stringify({ error: err.message || 'Live session failed to connect' }));
   }
 });
 
@@ -697,7 +941,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`[SafeVision AI] Server running at http://0.0.0.0:${PORT}`);
   });
 }

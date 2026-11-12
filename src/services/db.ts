@@ -3,7 +3,7 @@
  */
 
 const DB_NAME = 'safevision_db';
-const DB_VERSION = 3;
+const DB_VERSION = 5;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -44,6 +44,53 @@ export function getDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('documentBlobs')) {
         db.createObjectStore('documentBlobs', { keyPath: 'id' });
+      }
+      // Milestone 3 Agent & Workflows stores
+      if (!db.objectStoreNames.contains('conversations')) {
+        db.createObjectStore('conversations', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('messages')) {
+        const msgStore = db.createObjectStore('messages', { keyPath: 'id' });
+        msgStore.createIndex('conversationId', 'conversationId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('incidents')) {
+        db.createObjectStore('incidents', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('workflowRuns')) {
+        const wfStore = db.createObjectStore('workflowRuns', { keyPath: 'id' });
+        wfStore.createIndex('conversationId', 'conversationId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('ragEvaluations')) {
+        db.createObjectStore('ragEvaluations', { keyPath: 'id' });
+      }
+      // Milestone 4 Intelligence, Reports & Notifications stores
+      if (!db.objectStoreNames.contains('correctiveActions')) {
+        const caStore = db.createObjectStore('correctiveActions', { keyPath: 'id' });
+        caStore.createIndex('zone', 'zone', { unique: false });
+        caStore.createIndex('status', 'status', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('reports')) {
+        const repStore = db.createObjectStore('reports', { keyPath: 'id' });
+        repStore.createIndex('type', 'type', { unique: false });
+        repStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('reportSchedules')) {
+        db.createObjectStore('reportSchedules', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('notifications')) {
+        const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
+        notifStore.createIndex('userId', 'userId', { unique: false });
+        notifStore.createIndex('read', 'read', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('savedViews')) {
+        const svStore = db.createObjectStore('savedViews', { keyPath: 'id' });
+        svStore.createIndex('userId', 'userId', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('alertRules')) {
+        db.createObjectStore('alertRules', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('reportBlobs')) {
+        db.createObjectStore('reportBlobs', { keyPath: 'id' });
       }
     };
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { repository } from '../services/storage';
 import { Scan, Violation } from '../types';
 import { useToast } from '../context/ToastContext';
@@ -40,14 +41,35 @@ import {
   ChevronRight,
   Database,
   Layers,
+  Workflow,
+  ExternalLink,
 } from 'lucide-react';
 
-const COLORS = ['#ef4444', '#f97316', '#eab308', '#06b6d4', '#8b5cf6', '#ec4899'];
+import { useTheme } from '../context/ThemeContext';
+
+const DARK_COLORS = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#f472b6'];
+const LIGHT_COLORS = ['#dc2626', '#d97706', '#059669', '#2563eb', '#7c3aed', '#db2777'];
 
 export const DashboardPage: React.FC = () => {
   const { addToast } = useToast();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
+  const COLORS = isLight ? LIGHT_COLORS : DARK_COLORS;
+
+  const tooltipStyle = {
+    backgroundColor: isLight ? '#ffffff' : '#141b26',
+    border: isLight ? '1px solid #e2e8f0' : '1px solid #232d3d',
+    borderRadius: '0.75rem',
+    color: isLight ? '#0f172a' : '#f1f4f8',
+    fontSize: '12px',
+    boxShadow: isLight ? '0 4px 14px rgba(15, 23, 42, 0.08)' : '0 4px 14px rgba(0, 0, 0, 0.4)',
+  };
+
+  const navigate = useNavigate();
+  const axisColor = isLight ? '#475569' : '#9aa8bc';
   const [scans, setScans] = useState<Scan[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
+  const [openIncidentsCount, setOpenIncidentsCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -72,8 +94,10 @@ export const DashboardPage: React.FC = () => {
     try {
       const allScans = await repository.getAllScans();
       const allViolations = await repository.getAllViolations();
+      const allIncidents = await repository.getAllIncidents();
       setScans(allScans);
       setViolations(allViolations);
+      setOpenIncidentsCount(allIncidents.filter((i) => i.status === 'open').length);
     } catch (e) {
       console.error(e);
     } finally {
@@ -413,7 +437,7 @@ export const DashboardPage: React.FC = () => {
       )}
 
       {/* KPI Cards Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Scans */}
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl relative overflow-hidden">
           <div className="flex items-center justify-between">
@@ -491,6 +515,31 @@ export const DashboardPage: React.FC = () => {
           </div>
           <div className="text-[11px] text-amber-400/80 mt-1">Priority for safety drill</div>
         </div>
+
+        {/* Open Incidents KPI Card */}
+        <div
+          onClick={() => navigate('/alerts?tab=incidents')}
+          className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-amber-500/50 shadow-xl relative overflow-hidden cursor-pointer transition-all group"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider group-hover:text-amber-300 transition-colors">
+              Open Incidents
+            </span>
+            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <Workflow className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-black font-mono text-purple-400">{openIncidentsCount}</span>
+            <span className="text-xs text-slate-400 flex items-center font-medium">
+              Active Cases
+            </span>
+          </div>
+          <div className="text-[11px] text-purple-400/80 mt-1 flex items-center gap-1">
+            <span>Manage in Registry</span>
+            <ExternalLink className="w-2.5 h-2.5" />
+          </div>
+        </div>
       </div>
 
       {/* Row 1 Charts: Line Chart (Violations Over Time) & Area Chart (Compliance Trend) */}
@@ -510,23 +559,15 @@ export const DashboardPage: React.FC = () => {
           <div className="h-64 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={timeSeriesData}>
-                <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '0.75rem',
-                    color: '#f8fafc',
-                    fontSize: '12px',
-                  }}
-                />
+                <XAxis dataKey="date" stroke={axisColor} fontSize={11} tickLine={false} />
+                <YAxis stroke={axisColor} fontSize={11} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Line
                   type="monotone"
                   dataKey="violations"
-                  stroke="#ef4444"
+                  stroke={isLight ? '#dc2626' : '#f87171'}
                   strokeWidth={2.5}
-                  dot={{ r: 4, fill: '#ef4444' }}
+                  dot={{ r: 4, fill: isLight ? '#dc2626' : '#f87171' }}
                   activeDot={{ r: 6 }}
                 />
               </LineChart>
@@ -551,25 +592,17 @@ export const DashboardPage: React.FC = () => {
               <AreaChart data={timeSeriesData}>
                 <defs>
                   <linearGradient id="complianceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="5%" stopColor={isLight ? '#059669' : '#34d399'} stopOpacity={0.35} />
+                    <stop offset="95%" stopColor={isLight ? '#059669' : '#34d399'} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="date" stroke="#64748b" fontSize={11} tickLine={false} />
-                <YAxis stroke="#64748b" domain={[0, 100]} fontSize={11} tickLine={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '0.75rem',
-                    color: '#f8fafc',
-                    fontSize: '12px',
-                  }}
-                />
+                <XAxis dataKey="date" stroke={axisColor} fontSize={11} tickLine={false} />
+                <YAxis stroke={axisColor} domain={[0, 100]} fontSize={11} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Area
                   type="monotone"
                   dataKey="complianceRate"
-                  stroke="#10b981"
+                  stroke={isLight ? '#059669' : '#34d399'}
                   strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url(#complianceGrad)"
@@ -604,16 +637,8 @@ export const DashboardPage: React.FC = () => {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      border: '1px solid #334155',
-                      borderRadius: '0.75rem',
-                      color: '#f8fafc',
-                      fontSize: '12px',
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: '11px', color: axisColor }} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -632,20 +657,12 @@ export const DashboardPage: React.FC = () => {
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dayOfWeekData}>
-                <XAxis dataKey="day" stroke="#64748b" fontSize={11} tickLine={false} />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '0.75rem',
-                    color: '#f8fafc',
-                    fontSize: '12px',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }} />
-                <Bar dataKey="image" fill="#f59e0b" name="Image Scan" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="video" fill="#06b6d4" name="Video Frame" radius={[4, 4, 0, 0]} />
+                <XAxis dataKey="day" stroke={axisColor} fontSize={11} tickLine={false} />
+                <YAxis stroke={axisColor} fontSize={11} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: '11px', color: axisColor }} />
+                <Bar dataKey="image" fill={isLight ? '#d97706' : '#fbbf24'} name="Image Scan" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="video" fill={isLight ? '#2563eb' : '#60a5fa'} name="Video Frame" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -666,7 +683,7 @@ export const DashboardPage: React.FC = () => {
                 innerRadius="65%"
                 outerRadius="95%"
                 barSize={12}
-                data={[{ name: 'Score', value: kpis.avgCompliance, fill: '#10b981' }]}
+                data={[{ name: 'Score', value: kpis.avgCompliance, fill: isLight ? '#059669' : '#34d399' }]}
                 startAngle={210}
                 endAngle={-30}
               >

@@ -102,7 +102,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
   if (!doc) {
     return (
       <div className="h-full min-h-[500px] rounded-2xl border border-slate-800 bg-slate-900/40 p-8 flex flex-col items-center justify-center text-center">
-        <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-[#7C5CFF] flex items-center justify-center mb-4 shadow-lg shadow-violet-950/20">
+        <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center mb-4 shadow-lg shadow-violet-950/20">
           <FileText className="w-8 h-8" />
         </div>
         <h3 className="text-base font-bold text-white">No Document Selected</h3>
@@ -137,7 +137,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
       <div className="p-4 border-b border-slate-800 bg-slate-950/70 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-violet-500/20 text-[#7C5CFF] border border-violet-500/30">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-violet-500/20 text-violet-400 border border-violet-500/30">
               {doc.fileType.toUpperCase()}
             </span>
             <h3 className="text-sm font-bold text-white truncate max-w-md" title={doc.fileName}>
@@ -172,7 +172,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               onClick={() => setActiveTab('document')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'document'
-                  ? 'bg-[#7C5CFF] text-white shadow-md shadow-violet-950/30 font-semibold'
+                  ? 'bg-violet-700 text-white shadow-md shadow-violet-950/30 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -182,7 +182,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               onClick={() => setActiveTab('extracted')}
               className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'extracted'
-                  ? 'bg-[#7C5CFF] text-white shadow-md shadow-violet-950/30 font-semibold'
+                  ? 'bg-violet-700 text-white shadow-md shadow-violet-950/30 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -195,7 +195,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               onClick={() => setActiveTab('chunks')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'chunks'
-                  ? 'bg-[#7C5CFF] text-white shadow-md shadow-violet-950/30 font-semibold'
+                  ? 'bg-violet-700 text-white shadow-md shadow-violet-950/30 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -392,7 +392,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
                   Review and confirm extracted safety policies to pre-fill automated enforcement rules.
                 </p>
               </div>
-              <span className="px-2.5 py-1 rounded-lg bg-violet-500/10 text-[#7C5CFF] border border-violet-500/30 font-mono text-xs font-bold">
+              <span className="px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/30 font-mono text-xs font-bold">
                 {fields.filter((f) => f.reviewStatus === 'confirmed').length} / {fields.length} Confirmed
               </span>
             </div>

@@ -1,0 +1,46 @@
+name: CI/CD Pipeline - SafeVision AI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test_and_build:
+    name: Lint, Typecheck, Test & Production Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeScript Static Typecheck
+        run: npm run typecheck
+
+      - name: ESLint / Code Validation
+        run: npm run lint
+
+      - name: Execute Vitest Unit & Integration Tests
+        run: npm run test:unit
+
+      - name: Accessibility Automated Checks
+        run: npm run test:a11y
+
+      - name: End-to-End Test Scenarios (Mock Engine)
+        run: npm run test:e2e
+
+      - name: Production Vite Bundle Build
+        run: npm run build
+
+      - name: Security Dependency Audit
+        run: npm audit --audit-level=high || true
