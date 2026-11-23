@@ -2,6 +2,11 @@
 
 An end-to-end workplace safety monitoring, compliance analytics, multimodal RAG agent, and automated OSHA reporting platform built with React 19, TypeScript, Tailwind CSS v4, Express, Vite, and optional Python FastAPI + LangGraph.
 
+## Live Application
+
+- **Shared App URL**: [https://ais-pre-hgne23licskyn22gdxnrxd-678567515781.asia-southeast1.run.app](https://ais-pre-hgne23licskyn22gdxnrxd-678567515781.asia-southeast1.run.app)
+- **Development App URL**: [https://ais-dev-hgne23licskyn22gdxnrxd-678567515781.asia-southeast1.run.app](https://ais-dev-hgne23licskyn22gdxnrxd-678567515781.asia-southeast1.run.app)
+
 ---
 
 ## Key Capabilities
