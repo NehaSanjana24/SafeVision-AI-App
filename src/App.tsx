@@ -1,19 +1,28 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { AppLayout } from './components/layout/AppLayout';
-import { HomePage } from './pages/HomePage';
-import { LoginPage } from './pages/LoginPage';
-import { DetectionPage } from './pages/DetectionPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { IntelligencePage } from './pages/IntelligencePage';
-import { ReportsPage } from './pages/ReportsPage';
-import { AlertsPage } from './pages/AlertsPage';
-import { KnowledgePage } from './pages/KnowledgePage';
-import { AssistantPage } from './pages/AssistantPage';
+
+const HomePage = lazy(() => import('./pages/HomePage').then((m) => ({ default: m.HomePage })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
+const DetectionPage = lazy(() => import('./pages/DetectionPage').then((m) => ({ default: m.DetectionPage })));
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then((m) => ({ default: m.IntelligencePage })));
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
+const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then((m) => ({ default: m.KnowledgePage })));
+const AssistantPage = lazy(() => import('./pages/AssistantPage').then((m) => ({ default: m.AssistantPage })));
+const AlertsPage = lazy(() => import('./pages/AlertsPage').then((m) => ({ default: m.AlertsPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
+
+const RouteFallback: React.FC = () => (
+  <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-400">
+    <div className="w-10 h-10 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-3" />
+    <p className="text-xs font-medium tracking-wide">Loading workspace module...</p>
+  </div>
+);
 
 // Standard Error Boundary with Copy Error Details & Diagnostics (PART 3.5)
 class ErrorBoundary extends React.Component<
@@ -63,7 +72,7 @@ class ErrorBoundary extends React.Component<
             </button>
             <button
               onClick={this.handleCopyDetails}
-              className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 font-semibold text-xs hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-cyan-400 font-semibold text-xs hover:text-amber-400 hover:bg-slate-800 transition-colors cursor-pointer"
             >
               {this.state.copied ? 'Copied Details!' : 'Copy Error Details'}
             </button>
@@ -83,21 +92,24 @@ export default function App() {
           <ToastProvider>
             <NotificationProvider>
               <BrowserRouter>
-                <Routes>
-                  {/* Layout wrapper handles route protection */}
-                  <Route element={<AppLayout />}>
-                    <Route path="/" element={<HomePage />} />
-                    <Route path="/login" element={<LoginPage />} />
-                    <Route path="/detect" element={<DetectionPage />} />
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                    <Route path="/intelligence" element={<IntelligencePage />} />
-                    <Route path="/reports" element={<ReportsPage />} />
-                    <Route path="/knowledge" element={<KnowledgePage />} />
-                    <Route path="/assistant" element={<AssistantPage />} />
-                    <Route path="/alerts" element={<AlertsPage />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Route>
-                </Routes>
+                <Suspense fallback={<RouteFallback />}>
+                  <Routes>
+                    {/* Layout wrapper handles route protection */}
+                    <Route element={<AppLayout />}>
+                      <Route path="/" element={<HomePage />} />
+                      <Route path="/login" element={<LoginPage />} />
+                      <Route path="/detect" element={<DetectionPage />} />
+                      <Route path="/dashboard" element={<DashboardPage />} />
+                      <Route path="/intelligence" element={<IntelligencePage />} />
+                      <Route path="/reports" element={<ReportsPage />} />
+                      <Route path="/knowledge" element={<KnowledgePage />} />
+                      <Route path="/assistant" element={<AssistantPage />} />
+                      <Route path="/alerts" element={<AlertsPage />} />
+                      <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Route>
+                  </Routes>
+                </Suspense>
               </BrowserRouter>
             </NotificationProvider>
           </ToastProvider>

@@ -151,6 +151,7 @@ export interface ExecutiveKPIs {
   sparklines: {
     compliance: number[];
     violations: number[];
+    incidents: number[];
   };
 }
 
@@ -162,20 +163,26 @@ export function computeExecutiveKPIs(params: {
   currentIncidents: Incident[];
   priorIncidents: Incident[];
   hasPolicyKnowledge: boolean;
+  workflowRuns?: { toolName?: string; name?: string; status?: string; createdAt: string }[];
+  citedClasses?: Set<string>;
 }): ExecutiveKPIs {
   const { currentViolations, priorViolations, currentScans, priorScans, currentIncidents, priorIncidents } = params;
 
+  // Exclude false positives from validated violations count
+  const validCurrentViols = currentViolations.filter((v) => !v.isFalsePositive);
+  const validPriorViols = priorViolations.filter((v) => !v.isFalsePositive);
+
   // 1. Compliance %
-  const currentCompSum = currentScans.reduce((acc, s) => acc + (s.compliancePct || 100), 0);
+  const currentCompSum = currentScans.reduce((acc, s) => acc + (s.compliancePct ?? 100), 0);
   const currentComp = currentScans.length > 0 ? Math.round(currentCompSum / currentScans.length) : 100;
 
-  const priorCompSum = priorScans.reduce((acc, s) => acc + (s.compliancePct || 100), 0);
-  const priorComp = priorScans.length > 0 ? Math.round(priorCompSum / priorScans.length) : 100;
-  const complianceDelta = currentComp - priorComp;
+  const priorCompSum = priorScans.reduce((acc, s) => acc + (s.compliancePct ?? 100), 0);
+  const priorComp = priorScans.length > 0 ? Math.round(priorCompSum / priorScans.length) : currentComp;
+  const complianceDelta = priorScans.length > 0 ? currentComp - priorComp : 0;
 
   // 2. Violations
-  const totalViolations = currentViolations.length;
-  const priorTotalViolations = priorViolations.length;
+  const totalViolations = validCurrentViols.length;
+  const priorTotalViolations = validPriorViols.length;
   const violationsDelta = totalViolations - priorTotalViolations;
 
   // 3. Open Incidents
@@ -183,54 +190,105 @@ export function computeExecutiveKPIs(params: {
   const priorOpen = priorIncidents.filter((i) => i.status === 'open' || i.status === 'investigating').length;
   const openIncidentsDelta = openIncidents - priorOpen;
 
-  // 4. Avg Time to Close
-  const closedIncidents = currentIncidents.filter((i) => i.status === 'closed' || i.status === 'resolved');
-  let avgCloseHours = 0;
-  if (closedIncidents.length > 0) {
-    const totalMs = closedIncidents.reduce((acc, i) => {
+  // 4. Avg Time to Close (computed from closed/resolved incidents)
+  const calcAvgCloseHours = (list: Incident[]) => {
+    const closed = list.filter((i) => i.status === 'closed' || i.status === 'resolved');
+    if (closed.length === 0) return 0;
+    const totalMs = closed.reduce((acc, i) => {
       const created = new Date(i.createdAt).getTime();
-      const updated = i.updatedAt ? new Date(i.updatedAt).getTime() : created + 24 * 3600 * 1000;
-      return acc + (updated - created);
+      const updated = i.updatedAt ? new Date(i.updatedAt).getTime() : created;
+      return acc + Math.max(0, updated - created);
     }, 0);
-    avgCloseHours = Math.round((totalMs / closedIncidents.length / (3600 * 1000)) * 10) / 10;
-  }
-  const avgTimeToCloseDelta = 0; // standard baseline
+    return Math.round((totalMs / closed.length / (3600 * 1000)) * 10) / 10;
+  };
+  const avgCloseHours = calcAvgCloseHours(currentIncidents);
+  const priorAvgCloseHours = calcAvgCloseHours(priorIncidents);
+  const avgTimeToCloseDelta =
+    avgCloseHours > 0 && priorAvgCloseHours > 0
+      ? Math.round((avgCloseHours - priorAvgCloseHours) * 10) / 10
+      : 0;
 
-  // 5. Repeat Violation Rate
-  const sortedCur = [...currentViolations].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  let curRepeats = 0;
-  for (let i = 0; i < sortedCur.length; i++) {
-    for (let j = i - 1; j >= 0; j--) {
-      if (sortedCur[i].type === sortedCur[j].type && sortedCur[i].zone === sortedCur[j].zone) {
-        curRepeats++;
-        break;
+  // 5. Repeat Violation Rate (same zone & class within 7 days)
+  const calcRepeatRate = (list: Violation[]) => {
+    if (list.length <= 1) return 0;
+    const sorted = [...list].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const sevenDaysMs = 7 * 24 * 3600 * 1000;
+    let repeats = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const tCur = new Date(sorted[i].createdAt).getTime();
+      for (let j = i - 1; j >= 0; j--) {
+        const tPrev = new Date(sorted[j].createdAt).getTime();
+        if (tCur - tPrev > sevenDaysMs) break;
+        if (sorted[i].type === sorted[j].type && sorted[i].zone === sorted[j].zone) {
+          repeats++;
+          break;
+        }
       }
     }
-  }
-  const repeatRate = totalViolations > 0 ? Math.round((curRepeats / totalViolations) * 100) : 0;
-  const repeatViolationDelta = 0;
+    return Math.round((repeats / list.length) * 100);
+  };
+  const repeatRate = calcRepeatRate(validCurrentViols);
+  const priorRepeatRate = calcRepeatRate(validPriorViols);
+  const repeatViolationDelta = validPriorViols.length > 0 ? repeatRate - priorRepeatRate : 0;
 
   // 6. High & Critical Incidents
   const highCritical = currentIncidents.filter((i) => i.severity === 'high' || i.severity === 'critical').length;
   const priorHighCrit = priorIncidents.filter((i) => i.severity === 'high' || i.severity === 'critical').length;
   const highCriticalDelta = highCritical - priorHighCrit;
 
-  // 7. Alerts sent
-  const alertsSent = highCritical + (openIncidents > 0 ? 1 : 0);
+  // 7. Alerts sent (from workflowRuns if provided + high/critical incidents)
+  const wfAlerts = (params.workflowRuns || []).filter(
+    (w) =>
+      (w.toolName === 'supervisor_alert' || w.name?.toLowerCase().includes('alert')) &&
+      (w.status === 'sent' || w.status === 'simulated' || w.status === 'completed')
+  ).length;
+  const alertsSent = wfAlerts > 0 ? wfAlerts : highCritical;
   const alertsSentDelta = alertsSent - priorHighCrit;
 
-  // 8. Policy coverage %
-  // Check citations in incidents & violations
-  const coveredViolations = currentViolations.filter((v) => {
-    // Standard PPE classes map directly to OSHA/ANSI site policies
-    return v.type.includes('Helmet') || v.type.includes('Vest') || v.type.includes('Goggles') || v.type.includes('Gloves');
+  // 8. Policy coverage % (% of violations whose class/incident has KB policy coverage)
+  const incidentCoveredViolationIds = new Set<string>();
+  for (const inc of currentIncidents) {
+    if ((inc.policyCitations && inc.policyCitations.length > 0) || (inc.citations && inc.citations.length > 0)) {
+      for (const vid of inc.violationIds || []) incidentCoveredViolationIds.add(vid);
+    }
+  }
+  const coveredViolations = validCurrentViols.filter((v) => {
+    if (incidentCoveredViolationIds.has(v.id)) return true;
+    if (params.citedClasses && params.citedClasses.size > 0) {
+      return params.citedClasses.has(v.type.toLowerCase());
+    }
+    if (!params.hasPolicyKnowledge) return false;
+    const t = v.type.toLowerCase();
+    return t.includes('helmet') || t.includes('vest') || t.includes('goggles') || t.includes('gloves') || t.includes('mask');
   }).length;
   const policyCoveragePct = totalViolations > 0 ? Math.round((coveredViolations / totalViolations) * 100) : 100;
   const policyCoverageDelta = 0;
 
-  // Sparklines (last 7 data points)
-  const sparkComp: number[] = [92, 94, 91, 89, 93, 95, currentComp];
-  const sparkViol: number[] = [4, 3, 6, 2, 5, 3, Math.min(10, totalViolations)];
+  // Compute real 7-bucket chronological sparklines from actual stored scans/violations/incidents
+  const byDay: Record<string, { compSum: number; scanCount: number; violCount: number; incCount: number }> = {};
+  for (const s of currentScans) {
+    const d = s.createdAt.split('T')[0];
+    if (!byDay[d]) byDay[d] = { compSum: 0, scanCount: 0, violCount: 0, incCount: 0 };
+    byDay[d].compSum += s.compliancePct ?? 100;
+    byDay[d].scanCount += 1;
+  }
+  for (const v of validCurrentViols) {
+    const d = v.createdAt.split('T')[0];
+    if (!byDay[d]) byDay[d] = { compSum: 0, scanCount: 0, violCount: 0, incCount: 0 };
+    byDay[d].violCount += 1;
+  }
+  for (const inc of currentIncidents) {
+    const d = inc.createdAt.split('T')[0];
+    if (!byDay[d]) byDay[d] = { compSum: 0, scanCount: 0, violCount: 0, incCount: 0 };
+    byDay[d].incCount += 1;
+  }
+
+  const recentDates = Object.keys(byDay).sort().slice(-10);
+  const sparkComp = recentDates.map((d) =>
+    byDay[d].scanCount > 0 ? Math.round(byDay[d].compSum / byDay[d].scanCount) : currentComp
+  );
+  const sparkViol = recentDates.map((d) => byDay[d].violCount);
+  const sparkInc = recentDates.map((d) => byDay[d].incCount);
 
   return {
     compliancePct: currentComp,
@@ -239,7 +297,7 @@ export function computeExecutiveKPIs(params: {
     violationsDelta,
     openIncidents,
     openIncidentsDelta,
-    avgTimeToCloseHours: avgCloseHours || 14.5,
+    avgTimeToCloseHours: avgCloseHours,
     avgTimeToCloseDelta,
     repeatViolationRatePct: repeatRate,
     repeatViolationDelta,
@@ -250,8 +308,9 @@ export function computeExecutiveKPIs(params: {
     policyCoveragePct,
     policyCoverageDelta,
     sparklines: {
-      compliance: sparkComp,
-      violations: sparkViol,
+      compliance: sparkComp.length > 0 ? sparkComp : [currentComp],
+      violations: sparkViol.length > 0 ? sparkViol : [totalViolations],
+      incidents: sparkInc.length > 0 ? sparkInc : [openIncidents],
     },
   };
 }
@@ -585,3 +644,208 @@ export function evaluateAlertRules(params: {
 
   return { triggeredNotifications: triggered, updatedRules };
 }
+
+export interface ZoneRiskTrendPoint {
+  date: string;
+  A: number;
+  B: number;
+  C: number;
+  D: number;
+}
+
+/**
+ * Computes daily 0-100 risk trajectory per zone across the available date buckets.
+ */
+export function computeZoneRiskTrends(
+  scans: Scan[],
+  violations: Violation[],
+  incidents: Incident[],
+  weights?: { severityWeight: number; repeatWeight: number; openIncidentWeight: number; trendWeight: number }
+): ZoneRiskTrendPoint[] {
+  const dateSet = new Set<string>();
+  for (const s of scans) dateSet.add(s.createdAt.split('T')[0]);
+  for (const v of violations) dateSet.add(v.createdAt.split('T')[0]);
+  const sortedDates = Array.from(dateSet).sort().slice(-14);
+
+  return sortedDates.map((d, idx) => {
+    const dayEnd = new Date(`${d}T23:59:59.999Z`).getTime();
+    const winStart = dayEnd - 7 * 24 * 3600 * 1000;
+    const priorStart = winStart - 7 * 24 * 3600 * 1000;
+
+    const wScans = scans.filter((s) => {
+      const t = new Date(s.createdAt).getTime();
+      return t >= winStart && t <= dayEnd;
+    });
+    const wViols = violations.filter((v) => {
+      const t = new Date(v.createdAt).getTime();
+      return !v.isFalsePositive && t >= winStart && t <= dayEnd;
+    });
+    const pViols = violations.filter((v) => {
+      const t = new Date(v.createdAt).getTime();
+      return !v.isFalsePositive && t >= priorStart && t < winStart;
+    });
+    const wIncs = incidents.filter((inc) => new Date(inc.createdAt).getTime() <= dayEnd);
+
+    const risks = computeAllZonesRisk({
+      violations: wViols,
+      scans: wScans,
+      incidents: wIncs,
+      priorViolations: pViols,
+      weights,
+    });
+
+    const getS = (z: 'A' | 'B' | 'C' | 'D') => risks.find((r) => r.zone === z)?.score ?? (idx > 0 ? 0 : 0);
+    return {
+      date: d,
+      A: getS('A'),
+      B: getS('B'),
+      C: getS('C'),
+      D: getS('D'),
+    };
+  });
+}
+
+export interface RootCauseSummary {
+  cause: string;
+  count: number;
+  pct: number;
+  zones: string[];
+}
+
+/**
+ * Aggregates top recurring root causes from incident summaries and validated violations.
+ */
+export function computeRecurringRootCauses(
+  incidents: Incident[],
+  violations: Violation[]
+): RootCauseSummary[] {
+  const buckets: Record<string, { count: number; zones: Set<string> }> = {};
+
+  const categorize = (text: string, fallbackType?: string): string => {
+    const l = text.toLowerCase();
+    if (l.includes('helmet') || l.includes('hardhat') || l.includes('headgear') || l.includes('crane')) {
+      return 'Unsecured Headgear in Overhead / Hoist Sectors';
+    }
+    if (l.includes('vest') || l.includes('visibility') || l.includes('dock') || l.includes('forklift')) {
+      return 'High-Visibility Vest Absence in Transit Aisles';
+    }
+    if (l.includes('goggle') || l.includes('eye') || l.includes('welding') || l.includes('spark')) {
+      return 'Missing Eye & Arc Shielding During Hot Work';
+    }
+    if (l.includes('glove') || l.includes('hand') || l.includes('chemical')) {
+      return 'Hand / Chemical Barrier Non-Compliance';
+    }
+    if (l.includes('mask') || l.includes('respirat')) {
+      return 'Respiratory Gear Omission in Particulate Bay';
+    }
+    if (l.includes('shift') || l.includes('contractor') || l.includes('briefing')) {
+      return 'Shift Handover & Subcontractor Onboarding Gap';
+    }
+    return fallbackType ? `PPE Policy Deviation: ${fallbackType}` : 'General PPE Compliance Lapse';
+  };
+
+  for (const inc of incidents) {
+    const cause = categorize(`${inc.title || ''} ${inc.summary || ''}`, inc.class);
+    if (!buckets[cause]) buckets[cause] = { count: 0, zones: new Set() };
+    buckets[cause].count += 1;
+    if (inc.zone) buckets[cause].zones.add(inc.zone);
+  }
+
+  for (const v of violations.filter((x) => !x.isFalsePositive)) {
+    const cause = categorize(`${v.type} ${v.notes || ''}`, v.type);
+    if (!buckets[cause]) buckets[cause] = { count: 0, zones: new Set() };
+    buckets[cause].count += 1;
+    if (v.zone) buckets[cause].zones.add(v.zone);
+  }
+
+  const total = Object.values(buckets).reduce((acc, b) => acc + b.count, 0) || 1;
+  return Object.entries(buckets)
+    .map(([cause, data]) => ({
+      cause,
+      count: data.count,
+      pct: Math.round((data.count / total) * 100),
+      zones: Array.from(data.zones).sort(),
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+}
+
+export interface PolicyCoverageItem {
+  category: string;
+  covered: number;
+  uncovered: number;
+  coveragePct: number;
+}
+
+/**
+ * Measures violation classes backed by Knowledge Base policy citations vs gaps.
+ */
+export function computePolicyCoverageBreakdown(
+  violations: Violation[],
+  incidents: Incident[],
+  hasPolicyKnowledge: boolean
+): PolicyCoverageItem[] {
+  const valid = violations.filter((v) => !v.isFalsePositive);
+  const coveredViolationIds = new Set<string>();
+  for (const inc of incidents) {
+    if ((inc.policyCitations && inc.policyCitations.length > 0) || (inc.citations && inc.citations.length > 0)) {
+      for (const vid of inc.violationIds || []) coveredViolationIds.add(vid);
+    }
+  }
+
+  const map: Record<string, { covered: number; uncovered: number }> = {};
+  for (const v of valid) {
+    const key = v.type || 'Other';
+    if (!map[key]) map[key] = { covered: 0, uncovered: 0 };
+    const t = key.toLowerCase();
+    const isCovered =
+      coveredViolationIds.has(v.id) ||
+      (hasPolicyKnowledge &&
+        (t.includes('helmet') || t.includes('vest') || t.includes('goggle') || t.includes('glove') || t.includes('mask')));
+    if (isCovered) map[key].covered += 1;
+    else map[key].uncovered += 1;
+  }
+
+  return Object.entries(map).map(([category, counts]) => {
+    const total = counts.covered + counts.uncovered;
+    return {
+      category,
+      covered: counts.covered,
+      uncovered: counts.uncovered,
+      coveragePct: total > 0 ? Math.round((counts.covered / total) * 100) : 100,
+    };
+  });
+}
+
+export interface AgentActivityMetrics {
+  totalRuns: number;
+  autoLoggedIncidents: number;
+  sentAlerts: number;
+  pendingApprovals: number;
+  simulatedAlerts: number;
+  failedAlerts: number;
+}
+
+export function computeAgentActivityMetrics(
+  workflowRuns: { toolName?: string; name?: string; status?: string }[],
+  incidents: Incident[]
+): AgentActivityMetrics {
+  const autoLoggedIncidents = Math.max(
+    workflowRuns.filter((w) => w.toolName === 'incident_logger').length,
+    incidents.filter((i) => i.createdBy === 'agent' || i.source === 'agent').length
+  );
+  const sentAlerts = workflowRuns.filter((w) => w.status === 'sent').length;
+  const pendingApprovals = workflowRuns.filter((w) => w.status === 'pending_approval').length;
+  const simulatedAlerts = workflowRuns.filter((w) => w.status === 'simulated').length;
+  const failedAlerts = workflowRuns.filter((w) => w.status === 'failed').length;
+
+  return {
+    totalRuns: workflowRuns.length,
+    autoLoggedIncidents,
+    sentAlerts,
+    pendingApprovals,
+    simulatedAlerts,
+    failedAlerts,
+  };
+}
+

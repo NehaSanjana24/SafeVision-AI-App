@@ -78,7 +78,7 @@ export interface AgentRunCallbacks {
 }
 
 // Entity extraction regex helpers
-function extractEntities(text: string): AgentState['entities'] {
+export function extractEntities(text: string): AgentState['entities'] {
   const lower = text.toLowerCase();
   const entities: AgentState['entities'] = {};
 

@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { DocumentViewer } from '../components/knowledge/DocumentViewer';
 import { KnowledgeSearchPopover } from '../components/knowledge/KnowledgeSearchPopover';
+import { validateUploadedFile, MAX_BATCH_UPLOAD_FILES } from '../utils/security';
 import {
   BookOpen,
   Plus,
@@ -235,8 +236,8 @@ export const KnowledgePage: React.FC = () => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
-    if (fileArray.length > 20) {
-      addToast('error', 'Upload Limit Exceeded', 'You can upload up to 20 files at a time.');
+    if (fileArray.length > MAX_BATCH_UPLOAD_FILES) {
+      addToast('error', 'Upload Limit Exceeded', `You can upload up to ${MAX_BATCH_UPLOAD_FILES} files at a time.`);
       return;
     }
 
@@ -244,9 +245,9 @@ export const KnowledgePage: React.FC = () => {
     let successCount = 0;
 
     for (const file of fileArray) {
-      // 25 MB max size check
-      if (file.size > 25 * 1024 * 1024) {
-        addToast('error', 'File Too Large', `"${file.name}" exceeds 25 MB.`);
+      const validation = await validateUploadedFile(file, 'document');
+      if (!validation.valid) {
+        addToast('error', 'Blocked Document Upload', `"${file.name}": ${validation.error}`);
         continue;
       }
 
@@ -425,14 +426,14 @@ export const KnowledgePage: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-black tracking-tight text-white">
+                  <h1 className="text-xl font-black tracking-tight text-cyan-400">
                     Document Intelligence &amp; Knowledge Base
                   </h1>
                   <span className="px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/25 text-[10px] font-mono font-bold">
                     HYBRID RAG
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-indigo-400 mt-0.5">
                   Index OSHA regulations, safety manuals, and inspection logs to power automated policy grounding and verification.
                 </p>
               </div>
@@ -444,7 +445,7 @@ export const KnowledgePage: React.FC = () => {
             <button
               onClick={handleLoadSampleDocuments}
               disabled={isUploading}
-              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 border border-slate-700/80 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
               title="Preload 3 sample regulatory documents"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -455,7 +456,7 @@ export const KnowledgePage: React.FC = () => {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
-              className="px-4 py-2 rounded-xl bg-violet-600/90 hover:bg-violet-500 text-white text-xs font-bold shadow-md shadow-violet-950/30 flex items-center gap-2 transition-all hover:scale-105 cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 rounded-xl bg-violet-600/90 hover:bg-violet-500 text-yellow-200 text-xs font-bold shadow-md shadow-violet-950/30 flex items-center gap-2 transition-all hover:scale-105 cursor-pointer disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />
               <span>+ Add Documents</span>
@@ -480,10 +481,10 @@ export const KnowledgePage: React.FC = () => {
               <FileText className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              <span className="text-[10px] font-bold text-violet-400 uppercase tracking-wider block">
                 Total Documents
               </span>
-              <span className="text-lg font-black text-white font-mono">
+              <span className="text-lg font-black text-violet-400 font-mono">
                 {stats.docCount}
               </span>
             </div>
@@ -494,10 +495,10 @@ export const KnowledgePage: React.FC = () => {
               <Layers className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">
                 Indexed Chunks
               </span>
-              <span className="text-lg font-black text-white font-mono">
+              <span className="text-lg font-black text-blue-400 font-mono">
                 {stats.chunkCount}
               </span>
             </div>
@@ -508,10 +509,10 @@ export const KnowledgePage: React.FC = () => {
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
                 Extracted Rules
               </span>
-              <span className="text-lg font-black text-white font-mono">
+              <span className="text-lg font-black text-amber-400 font-mono">
                 {stats.extractedCount}
               </span>
             </div>
@@ -522,10 +523,10 @@ export const KnowledgePage: React.FC = () => {
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
                 Confirmation Rate
               </span>
-              <span className="text-lg font-black text-white font-mono">
+              <span className="text-lg font-black text-emerald-400 font-mono">
                 {stats.reviewRatePct !== null ? `${stats.reviewRatePct}%` : 'n/a'}
               </span>
             </div>
@@ -557,7 +558,7 @@ export const KnowledgePage: React.FC = () => {
         <button
           onClick={() => setMobileTab('files')}
           className={`flex-1 py-2 text-xs font-bold rounded-xl transition-colors ${
-            mobileTab === 'files' ? 'bg-violet-600 text-white' : 'text-slate-400'
+            mobileTab === 'files' ? 'bg-violet-600 text-yellow-200' : 'text-slate-400'
           }`}
         >
           Files ({documents.length})
@@ -565,7 +566,7 @@ export const KnowledgePage: React.FC = () => {
         <button
           onClick={() => setMobileTab('viewer')}
           className={`flex-1 py-2 text-xs font-bold rounded-xl transition-colors ${
-            mobileTab === 'viewer' ? 'bg-violet-600 text-white' : 'text-slate-400'
+            mobileTab === 'viewer' ? 'bg-violet-600 text-yellow-200' : 'text-slate-400'
           }`}
         >
           Viewer &amp; Policies
@@ -609,7 +610,7 @@ export const KnowledgePage: React.FC = () => {
               className="p-5 border-2 border-dashed border-violet-500/25 hover:border-violet-500/50 bg-violet-950/10 hover:bg-violet-950/20 rounded-2xl text-center cursor-pointer transition-all group"
             >
               <Upload className="w-6 h-6 text-violet-400 mx-auto mb-2 group-hover:scale-110 transition-transform" />
-              <p className="text-xs font-bold text-white">Drop files to index</p>
+              <p className="text-xs font-bold text-violet-400">Drop files to index</p>
               <p className="text-[10px] text-slate-400 mt-0.5">
                 PDF, DOCX, CSV, XLSX, TXT, Images (Max 25MB)
               </p>
@@ -660,7 +661,7 @@ export const KnowledgePage: React.FC = () => {
                           <div className="min-w-0">
                             <h4
                               className={`font-bold truncate max-w-[170px] ${
-                                isSelected ? 'text-white' : 'text-slate-200'
+                                isSelected ? 'text-violet-300' : 'text-blue-400'
                               }`}
                               title={doc.fileName}
                             >
@@ -680,7 +681,7 @@ export const KnowledgePage: React.FC = () => {
                               e.stopPropagation();
                               setMenuOpenDocId(menuOpenDocId === doc.id ? null : doc.id);
                             }}
-                            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
+                            className="p-1 rounded text-slate-400 hover:text-amber-400 hover:bg-slate-800"
                           >
                             <MoreVertical className="w-3.5 h-3.5" />
                           </button>
@@ -832,7 +833,7 @@ export const KnowledgePage: React.FC = () => {
                 }}
                 onChange={(e) => handleQueryChange(e.target.value)}
                 placeholder="Search knowledge base... (Press '/' to focus)"
-                className="w-full pl-11 pr-24 py-3 rounded-2xl bg-slate-900/90 border border-slate-800 focus:border-violet-500/80 focus:ring-2 focus:ring-violet-500/20 text-xs text-white placeholder-slate-500 transition-all shadow-xl focus:outline-none"
+                className="w-full pl-11 pr-24 py-3 rounded-2xl bg-slate-900/90 border border-slate-800 focus:border-violet-500/80 focus:ring-2 focus:ring-violet-500/20 text-xs text-cyan-400 placeholder-slate-500 transition-all shadow-xl focus:outline-none"
               />
               <div className="absolute right-3 flex items-center gap-1.5">
                 {searchQuery && (
@@ -842,7 +843,7 @@ export const KnowledgePage: React.FC = () => {
                       setSearchResults([]);
                       setIsSearchOpen(false);
                     }}
-                    className="p-1 rounded text-slate-500 hover:text-white"
+                    className="p-1 rounded text-slate-500 hover:text-rose-400"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -908,12 +909,12 @@ export const KnowledgePage: React.FC = () => {
       {renameModalDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-sm p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl space-y-4">
-            <h3 className="text-sm font-bold text-white">Rename Document</h3>
+            <h3 className="text-sm font-bold text-violet-400">Rename Document</h3>
             <input
               type="text"
               value={newDocName}
               onChange={(e) => setNewDocName(e.target.value)}
-              className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-violet-500"
+              className="w-full p-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-cyan-400 focus:outline-none focus:border-violet-500"
             />
             <div className="flex justify-end gap-2">
               <button
@@ -924,7 +925,7 @@ export const KnowledgePage: React.FC = () => {
               </button>
               <button
                 onClick={handleRenameDocument}
-                className="px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-colors"
+                className="px-4 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-yellow-200 text-xs font-bold transition-colors"
               >
                 Save
               </button>
@@ -940,7 +941,7 @@ export const KnowledgePage: React.FC = () => {
             <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center">
               <Trash2 className="w-5 h-5" />
             </div>
-            <h3 className="text-sm font-bold text-white">Delete Document</h3>
+            <h3 className="text-sm font-bold text-rose-400">Delete Document</h3>
             <p className="text-xs text-slate-400">
               Are you sure you want to delete &quot;{deleteConfirmDoc.fileName}&quot;? All associated chunks and extracted rules will be permanently removed.
             </p>
@@ -953,7 +954,7 @@ export const KnowledgePage: React.FC = () => {
               </button>
               <button
                 onClick={() => handleDeleteDocument(deleteConfirmDoc)}
-                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold"
+                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-yellow-200 text-xs font-bold"
               >
                 Confirm Delete
               </button>

@@ -26,13 +26,8 @@ import {
 import {
   LayoutDashboard,
   ShieldCheck,
-  ShieldAlert,
-  ScanEye,
-  TrendingUp,
-  TrendingDown,
   Filter,
   Download,
-  Calendar,
   Sparkles,
   Search,
   ArrowUpDown,
@@ -44,11 +39,11 @@ import {
   Workflow,
   ExternalLink,
 } from 'lucide-react';
-
+import { KPICards, DEMO_KPI_DATA } from '../components/dashboard/KPICards';
 import { useTheme } from '../context/ThemeContext';
 
-const DARK_COLORS = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#f472b6'];
-const LIGHT_COLORS = ['#dc2626', '#d97706', '#059669', '#2563eb', '#7c3aed', '#db2777'];
+const DARK_COLORS = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#22d3ee', '#fb923c', '#f472b6'];
+const LIGHT_COLORS = ['#dc2626', '#d97706', '#059669', '#2563eb', '#7c3aed', '#0891b2', '#ea580c', '#db2777'];
 
 export const DashboardPage: React.FC = () => {
   const { addToast } = useToast();
@@ -156,6 +151,7 @@ export const DashboardPage: React.FC = () => {
   const kpis = useMemo(() => {
     const totalScans = filteredScans.length;
     const activeViolations = filteredViolations.filter((v) => !v.isFalsePositive);
+    const resolvedViolations = activeViolations.filter((v) => Boolean(v.resolved)).length;
     const falsePositivesCount = filteredViolations.filter((v) => v.isFalsePositive).length;
     const totalViolations = activeViolations.length;
     const avgCompliance =
@@ -180,6 +176,7 @@ export const DashboardPage: React.FC = () => {
     return {
       totalScans,
       totalViolations,
+      resolvedViolations,
       falsePositivesCount,
       avgCompliance,
       mostCommon,
@@ -317,11 +314,11 @@ export const DashboardPage: React.FC = () => {
       {/* Top Header & Actions Strip */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
-            <LayoutDashboard className="w-6 h-6 text-amber-400" />
+          <h1 className="text-2xl font-black text-blue-400 tracking-tight flex items-center gap-2.5">
+            <LayoutDashboard className="w-6 h-6 text-blue-400" />
             <span>Safety Command Center</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-cyan-400 mt-0.5">
             Real-time workplace hazard surveillance telemetry, OSHA compliance metrics, and risk distributions.
           </p>
         </div>
@@ -359,7 +356,7 @@ export const DashboardPage: React.FC = () => {
                 key={r}
                 onClick={() => setDateRange(r)}
                 className={`px-2.5 py-1 rounded-md font-mono font-medium transition-all ${
-                  dateRange === r ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                  dateRange === r ? 'bg-amber-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-amber-400'
                 }`}
               >
                 {r.toUpperCase()}
@@ -421,8 +418,8 @@ export const DashboardPage: React.FC = () => {
       {scans.length === 0 && !loading && (
         <div className="p-8 rounded-3xl bg-gradient-to-r from-amber-500/10 via-slate-900 to-slate-900 border border-amber-500/30 text-center space-y-3">
           <Database className="w-12 h-12 text-amber-400 mx-auto opacity-80" />
-          <h3 className="text-lg font-bold text-white">No Detection Records Found Yet</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
+          <h3 className="text-lg font-bold text-amber-400">No Detection Records Found Yet</h3>
+          <p className="text-xs text-indigo-400 max-w-md mx-auto">
             You haven&apos;t run any safety scans yet. Click below to load realistic sample enterprise surveillance
             records to preview charts and metrics immediately!
           </p>
@@ -436,80 +433,54 @@ export const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* KPI Cards Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Total Scans */}
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Scans</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
-              <ScanEye className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-white">{kpis.totalScans}</span>
-            <span className="text-xs text-emerald-400 flex items-center font-medium">
-              <TrendingUp className="w-3 h-3 mr-0.5" /> +12% vs last mo
-            </span>
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">Industrial surveillance runs</div>
-        </div>
+      {/* Primary Workplace Safety KPI Cards (Total Inspections, Total PPE Violations, Resolved Violations, Compliance %) */}
+      <KPICards
+        data={
+          scans.length === 0 && !loading
+            ? DEMO_KPI_DATA
+            : {
+                totalInspections: kpis.totalScans,
+                totalViolations: kpis.totalViolations,
+                resolvedViolations: kpis.resolvedViolations,
+                compliancePercentage: kpis.avgCompliance,
+                falsePositivesExcluded: kpis.falsePositivesCount,
+                openViolations: Math.max(0, kpis.totalViolations - kpis.resolvedViolations),
+              }
+        }
+        isDemoData={scans.length === 0 && !loading}
+        loading={loading}
+        onSeedSampleData={handleSeedData}
+        onCardClick={(card) => {
+          if (card === 'inspections') {
+            navigate('/detect');
+          } else if (card === 'violations' || card === 'resolved') {
+            const params = new URLSearchParams();
+            params.set('tab', 'violations');
+            if (card === 'resolved') params.set('status', 'resolved');
+            if (violationTypeFilter !== 'all') params.set('type', violationTypeFilter);
+            if (sourceTypeFilter !== 'all') params.set('source', sourceTypeFilter);
+            navigate(`/alerts?${params.toString()}`);
+          } else {
+            navigate('/intelligence');
+          }
+        }}
+      />
 
-        {/* Total Violations */}
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Violations Caught</span>
-            <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center">
-              <ShieldAlert className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-rose-400">{kpis.totalViolations}</span>
-            {kpis.falsePositivesCount > 0 ? (
-              <span className="text-xs text-purple-400 flex items-center font-medium font-mono">
-                {kpis.falsePositivesCount} FP Calibrated
-              </span>
-            ) : (
-              <span className="text-xs text-rose-400 flex items-center font-medium">
-                <TrendingDown className="w-3 h-3 mr-0.5" /> Action required
-              </span>
-            )}
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">
-            Active unmitigated hazard flags
-          </div>
-        </div>
-
-        {/* Compliance % */}
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Compliance Score</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-emerald-400">{kpis.avgCompliance}%</span>
-            <span className="text-xs text-emerald-400 flex items-center font-medium">
-              <TrendingUp className="w-3 h-3 mr-0.5" /> +4.2%
-            </span>
-          </div>
-          <div className="text-[11px] text-slate-400 mt-1">Target threshold: 90%</div>
-        </div>
-
+      {/* Secondary Hazard & Incident Operations Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Most Common Violation */}
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl relative overflow-hidden">
+        <div className="p-5 rounded-2xl bg-slate-900/70 border border-amber-500/30 shadow-xl relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Frequent Hazard</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center border border-amber-500/25">
               <Layers className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 flex items-baseline justify-between gap-2">
             <span className="text-xl font-black text-amber-400 truncate block">
               {kpis.mostCommon}
             </span>
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-400 font-mono">
               {kpis.mostCommonCount} occurrences recorded
             </span>
           </div>
@@ -519,23 +490,23 @@ export const DashboardPage: React.FC = () => {
         {/* Open Incidents KPI Card */}
         <div
           onClick={() => navigate('/alerts?tab=incidents')}
-          className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-amber-500/50 shadow-xl relative overflow-hidden cursor-pointer transition-all group"
+          className="p-5 rounded-2xl bg-slate-900/70 border border-violet-500/30 hover:border-violet-500/60 shadow-xl relative overflow-hidden cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider group-hover:text-amber-300 transition-colors">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider group-hover:text-violet-400 transition-colors">
               Open Incidents
             </span>
-            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <div className="w-8 h-8 rounded-lg bg-violet-500/15 text-violet-400 flex items-center justify-center border border-violet-500/25 group-hover:scale-110 transition-transform">
               <Workflow className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-black font-mono text-purple-400">{openIncidentsCount}</span>
+            <span className="text-3xl font-black font-mono text-violet-400">{openIncidentsCount}</span>
             <span className="text-xs text-slate-400 flex items-center font-medium">
               Active Cases
             </span>
           </div>
-          <div className="text-[11px] text-purple-400/80 mt-1 flex items-center gap-1">
+          <div className="text-[11px] text-violet-400/80 mt-1 flex items-center gap-1">
             <span>Manage in Registry</span>
             <ExternalLink className="w-2.5 h-2.5" />
           </div>
@@ -548,7 +519,7 @@ export const DashboardPage: React.FC = () => {
         <div className="lg:col-span-7 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-white">Violations Over Time</h3>
+              <h3 className="text-sm font-bold text-rose-400">Violations Over Time</h3>
               <p className="text-[11px] text-slate-400">Daily frequency of non-compliance events</p>
             </div>
             <span className="text-xs font-mono text-rose-400 font-bold">
@@ -579,7 +550,7 @@ export const DashboardPage: React.FC = () => {
         <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-white">Compliance Trajectory (%)</h3>
+              <h3 className="text-sm font-bold text-emerald-400">Compliance Trajectory (%)</h3>
               <p className="text-[11px] text-slate-400">Overall site adherence percentage</p>
             </div>
             <span className="text-xs font-mono text-emerald-400 font-bold">
@@ -617,7 +588,7 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
         {/* Donut Chart: Violation Type Distribution (4 cols) */}
         <div className="lg:col-span-4 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-3">
-          <h3 className="text-sm font-bold text-white">Violation Distribution</h3>
+          <h3 className="text-sm font-bold text-violet-400">Violation Distribution</h3>
           <p className="text-[11px] text-slate-400">Breakdown by non-compliant PPE category</p>
 
           <div className="h-56 w-full">
@@ -651,7 +622,7 @@ export const DashboardPage: React.FC = () => {
 
         {/* Bar Chart: Violations by Day of Week & Source (5 cols) */}
         <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-3">
-          <h3 className="text-sm font-bold text-white">Violations by Day &amp; Source</h3>
+          <h3 className="text-sm font-bold text-amber-400">Violations by Day &amp; Source</h3>
           <p className="text-[11px] text-slate-400">Image uploads vs Continuous video extraction</p>
 
           <div className="h-56 w-full">
@@ -671,7 +642,7 @@ export const DashboardPage: React.FC = () => {
         {/* Radial Gauge: Current Compliance Score (3 cols) */}
         <div className="lg:col-span-3 p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl flex flex-col justify-between">
           <div>
-            <h3 className="text-sm font-bold text-white">Compliance Gauge</h3>
+            <h3 className="text-sm font-bold text-cyan-400">Compliance Gauge</h3>
             <p className="text-[11px] text-slate-400">Safety readiness rating</p>
           </div>
 
@@ -722,7 +693,7 @@ export const DashboardPage: React.FC = () => {
       <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-white">Hazard Density Matrix (Hour vs Weekday)</h3>
+            <h3 className="text-sm font-bold text-orange-400">Hazard Density Matrix (Hour vs Weekday)</h3>
             <p className="text-[11px] text-slate-400">
               Identifies peak non-compliance shift hours to schedule safety warden walks
             </p>
@@ -778,7 +749,7 @@ export const DashboardPage: React.FC = () => {
       <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-white">Recent Safety Scans Audit</h3>
+            <h3 className="text-sm font-bold text-indigo-400">Recent Safety Scans Audit</h3>
             <p className="text-[11px] text-slate-400">
               Showing {tableData.length} records matching current criteria
             </p>
@@ -808,7 +779,7 @@ export const DashboardPage: React.FC = () => {
                     setSortField('createdAt');
                     setSortAsc(!sortAsc);
                   }}
-                  className="pb-2.5 cursor-pointer hover:text-white"
+                  className="pb-2.5 cursor-pointer hover:text-amber-400"
                 >
                   <div className="flex items-center gap-1">
                     <span>Date &amp; Time</span>
@@ -823,7 +794,7 @@ export const DashboardPage: React.FC = () => {
                     setSortField('totalViolations');
                     setSortAsc(!sortAsc);
                   }}
-                  className="pb-2.5 cursor-pointer hover:text-white"
+                  className="pb-2.5 cursor-pointer hover:text-amber-400"
                 >
                   <div className="flex items-center gap-1">
                     <span>Violations</span>
@@ -835,7 +806,7 @@ export const DashboardPage: React.FC = () => {
                     setSortField('compliancePct');
                     setSortAsc(!sortAsc);
                   }}
-                  className="pb-2.5 cursor-pointer hover:text-white"
+                  className="pb-2.5 cursor-pointer hover:text-amber-400"
                 >
                   <div className="flex items-center gap-1">
                     <span>Compliance</span>

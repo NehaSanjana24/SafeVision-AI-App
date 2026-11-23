@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { UserRole } from '../types';
+import { isFirebaseConfigured } from '../utils/env';
 import {
   HardHat,
   Lock,
@@ -79,33 +80,37 @@ export const LoginPage: React.FC = () => {
         <div className="md:col-span-5 bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950/40 p-8 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-800 relative">
           <div>
             <div className="flex items-center gap-2.5 mb-8">
-              <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/25">
-                <HardHat className="w-6 h-6 text-slate-950" />
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-violet-600 to-rose-500 flex items-center justify-center shadow-lg shadow-violet-500/25">
+                <HardHat className="w-6 h-6 text-yellow-200" />
               </div>
               <div>
-                <span className="font-extrabold text-xl text-white tracking-tight">SafeVision</span>
-                <span className="ml-1 px-1.5 py-0.5 text-[10px] font-black rounded bg-amber-500 text-slate-950">AI</span>
+                <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-blue-600 via-violet-600 to-rose-600 dark:from-cyan-300 dark:via-violet-400 dark:to-amber-300 bg-clip-text text-transparent">
+                  SafeVision
+                </span>
+                <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-black rounded bg-gradient-to-r from-emerald-600 via-blue-600 to-violet-600 text-yellow-200">
+                  AI
+                </span>
               </div>
             </div>
 
-            <h2 className="text-2xl font-bold text-white tracking-tight leading-snug">
+            <h2 className="text-2xl font-bold text-cyan-400 tracking-tight leading-snug">
               Workplace Safety &amp; PPE Intelligence
             </h2>
-            <p className="mt-3 text-sm text-slate-400 leading-relaxed">
+            <p className="mt-3 text-sm text-indigo-400 leading-relaxed">
               Industrial computer vision verifying helmets, high-vis vests, respirators, and protective gear in real time.
             </p>
 
             <div className="mt-8 space-y-3.5">
-              <div className="flex items-center gap-2.5 text-xs text-slate-300">
+              <div className="flex items-center gap-2.5 text-xs text-emerald-400">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>OSHA 1926.100 &amp; 1910 PPE Compliance Rules</span>
               </div>
-              <div className="flex items-center gap-2.5 text-xs text-slate-300">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="flex items-center gap-2.5 text-xs text-blue-400">
+                <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
                 <span>Sub-second Detection via YOLOv8 / Gemini</span>
               </div>
-              <div className="flex items-center gap-2.5 text-xs text-slate-300">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="flex items-center gap-2.5 text-xs text-violet-400">
+                <CheckCircle2 className="w-4 h-4 text-violet-400 shrink-0" />
                 <span>Live Video Frame Extraction &amp; Alerts</span>
               </div>
             </div>
@@ -125,7 +130,7 @@ export const LoginPage: React.FC = () => {
           <div className="flex items-center justify-between mb-6">
             <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-mono font-medium flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              Demo Auth (Local Storage)
+              {isFirebaseConfigured() ? 'Firebase Auth Active' : 'Demo Auth (Local Storage)'}
             </span>
 
             {/* Quick-fill preset buttons */}
@@ -209,35 +214,35 @@ export const LoginPage: React.FC = () => {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1.5">
                 Work Email
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                <Mail className="w-4 h-4 text-blue-400 absolute left-3.5 top-3" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@safevision.ai"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-cyan-400 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-semibold text-violet-400 uppercase tracking-wider mb-1.5">
                 Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                <Lock className="w-4 h-4 text-violet-400 absolute left-3.5 top-3" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-cyan-400 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors"
                 />
                 <button
                   type="button"

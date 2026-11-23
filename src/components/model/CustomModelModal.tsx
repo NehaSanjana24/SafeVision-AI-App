@@ -126,7 +126,7 @@ python yolo_server.py`;
               <Cpu className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-base font-bold text-amber-400 flex items-center gap-2">
                 <span>Connect Custom Model weights (best.pt)</span>
                 <span className="px-1.5 py-0.5 rounded font-mono text-[9px] bg-amber-500/20 text-amber-300 font-bold">
                   YOLOv8 / PyTorch
@@ -139,7 +139,7 @@ python yolo_server.py`;
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 bg-slate-800 hover:bg-slate-700 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -288,7 +288,7 @@ python yolo_server.py`;
               <button
                 type="button"
                 onClick={handleResetToGemini}
-                className="text-xs text-slate-400 hover:text-white underline transition-colors"
+                className="text-xs text-slate-400 hover:text-cyan-400 underline transition-colors"
               >
                 Use Gemini Vision Fallback instead
               </button>
@@ -340,13 +340,13 @@ python yolo_server.py`;
             </div>
 
             <div className="space-y-2 text-slate-300">
-              <h4 className="font-bold text-white flex items-center gap-1.5">
+              <h4 className="font-bold text-emerald-400 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 <span>Next steps:</span>
               </h4>
               <ol className="list-decimal list-inside space-y-1 text-slate-400 text-[11px] leading-relaxed pl-1">
-                <li>Copy your custom <code className="text-white font-mono">best.pt</code> file into the project folder.</li>
-                <li>Run <code className="text-white font-mono">python yolo_server.py</code> (runs on port 8000).</li>
+                <li>Copy your custom <code className="text-amber-400 font-mono">best.pt</code> file into the project folder.</li>
+                <li>Run <code className="text-cyan-400 font-mono">python yolo_server.py</code> (runs on port 8000).</li>
                 <li>Return to the &quot;Connect Endpoint URL&quot; tab and click &quot;Test Connection&quot;.</li>
                 <li>SafeVision AI will now detect your exact trained PPE classes!</li>
               </ol>
@@ -369,7 +369,7 @@ python yolo_server.py`;
             <div className="p-6 rounded-2xl bg-slate-950 border-2 border-dashed border-slate-800 text-center space-y-3">
               <Upload className="w-10 h-10 text-amber-400 mx-auto" />
               <div>
-                <h4 className="font-bold text-white text-sm">
+                <h4 className="font-bold text-amber-400 text-sm">
                   {uploadedFileName ? `Selected: ${uploadedFileName}` : 'Select your best.pt file'}
                 </h4>
                 <p className="text-[11px] text-slate-400 mt-1">
@@ -402,7 +402,7 @@ python yolo_server.py`;
               <span className="font-bold block mb-0.5">Note on PyTorch weights:</span>
               <span>
                 Browser sandboxes cannot run native CUDA/PyTorch binary (.pt) models directly without a Python runtime or ONNX conversion. Running{' '}
-                <code className="font-mono text-white">python yolo_server.py</code> gives you full GPU acceleration and sub-50ms inference.
+                <code className="font-mono text-cyan-400">python yolo_server.py</code> gives you full GPU acceleration and sub-50ms inference.
               </span>
             </div>
 

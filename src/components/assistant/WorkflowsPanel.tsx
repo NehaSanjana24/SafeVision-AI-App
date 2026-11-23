@@ -194,14 +194,30 @@ export const WorkflowsPanel: React.FC<WorkflowsPanelProps> = ({
                 {/* Actions */}
                 <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 text-xs">
                   {run.incidentId && (
-                    <button
-                      type="button"
-                      onClick={() => navigate('/alerts?tab=incidents')}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      <span>View Incident #{run.incidentNumber || ''}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate('/alerts?tab=incidents')}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-400 hover:text-amber-300 transition-colors cursor-pointer"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>View Incident #{run.incidentNumber || ''}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(
+                            `/reports?type=incident_investigation&incidentId=${encodeURIComponent(
+                              run.incidentId!
+                            )}`
+                          )
+                        }
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-medium text-slate-200 transition-colors cursor-pointer"
+                      >
+                        <span>Report</span>
+                      </button>
+                    </div>
                   )}
 
                   {run.status === 'pending_approval' && (

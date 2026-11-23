@@ -78,7 +78,7 @@ export const PolicyDrawer: React.FC<PolicyDrawerProps> = ({
               <BookOpen className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <h3 className="text-sm font-bold text-violet-400 flex items-center gap-1.5">
                 <span>Compliance Policy References</span>
               </h3>
               <p className="text-[11px] text-slate-400">
@@ -91,7 +91,7 @@ export const PolicyDrawer: React.FC<PolicyDrawerProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-amber-400 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -102,7 +102,7 @@ export const PolicyDrawer: React.FC<PolicyDrawerProps> = ({
           <div className="p-3.5 rounded-xl bg-violet-950/20 border border-violet-500/25 text-xs text-slate-300 leading-relaxed flex items-start gap-2.5">
             <Sparkles className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold text-white block">Official Knowledge Base Citations</span>
+              <span className="font-bold text-cyan-400 block">Official Knowledge Base Citations</span>
               <span>
                 These regulatory rules and safety manual guidelines directly apply to this detected violation.
               </span>
@@ -136,7 +136,7 @@ export const PolicyDrawer: React.FC<PolicyDrawerProps> = ({
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <FileText className="w-4 h-4 text-violet-400 shrink-0" />
-                        <span className="font-bold text-white truncate max-w-[180px]">
+                        <span className="font-bold text-blue-400 truncate max-w-[180px]">
                           {result.doc.fileName}
                         </span>
                       </div>
@@ -180,7 +180,7 @@ export const PolicyDrawer: React.FC<PolicyDrawerProps> = ({
                   onClose();
                   navigate('/knowledge');
                 }}
-                className="mt-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-colors"
+                className="mt-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-yellow-200 text-xs font-bold transition-colors"
               >
                 Go to Knowledge Base
               </button>

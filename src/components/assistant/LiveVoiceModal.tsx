@@ -99,7 +99,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
               <Radio className="w-4 h-4 animate-pulse" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-purple-400 flex items-center gap-2">
                 <span>SafeVision Live Voice</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-purple-950/50 text-purple-300 border border-purple-800/60">
                   gemini-3.8-live
@@ -156,7 +156,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
               ) : isMuted ? (
                 <MicOff className="w-8 h-8 text-rose-300" />
               ) : (
-                <Mic className="w-8 h-8 text-white" />
+                <Mic className="w-8 h-8 text-yellow-200" />
               )}
             </div>
           </div>
@@ -242,7 +242,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
           <button
             type="button"
             onClick={handleEndSession}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/40 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-yellow-200 shadow-lg shadow-rose-950/40 transition-all cursor-pointer"
           >
             <PhoneOff className="w-4 h-4" />
             <span>End Session</span>

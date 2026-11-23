@@ -131,7 +131,7 @@ export const KnowledgeSearchPopover: React.FC<KnowledgeSearchPopoverProps> = ({
             }}
             className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
               isAskMode
-                ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-500/20'
+                ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-yellow-200 shadow-md shadow-violet-500/20'
                 : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700'
             }`}
           >
@@ -149,8 +149,8 @@ export const KnowledgeSearchPopover: React.FC<KnowledgeSearchPopoverProps> = ({
             onClick={() => setShowFilters(!showFilters)}
             className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
               showFilters || filterFileType || filterDocId
-                ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
-                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-violet-500/15 border-violet-500/30 text-violet-400'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-amber-400'
             }`}
             title="Filter search"
           >
@@ -159,7 +159,7 @@ export const KnowledgeSearchPopover: React.FC<KnowledgeSearchPopoverProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white"
+            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-rose-400"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -249,7 +249,7 @@ export const KnowledgeSearchPopover: React.FC<KnowledgeSearchPopoverProps> = ({
                         key={cit.number}
                         className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300 flex items-center gap-1.5"
                       >
-                        <span className="w-4 h-4 rounded-full bg-violet-600 text-white flex items-center justify-center font-bold text-[9px]">
+                        <span className="w-4 h-4 rounded-full bg-violet-600 text-yellow-200 flex items-center justify-center font-bold text-[9px]">
                           {cit.number}
                         </span>
                         <span className="text-violet-300 font-semibold truncate max-w-[140px]">
@@ -300,7 +300,7 @@ export const KnowledgeSearchPopover: React.FC<KnowledgeSearchPopoverProps> = ({
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <div className="flex items-center gap-2 min-w-0">
                       {getFileIcon(result.doc.fileType)}
-                      <span className="text-xs font-bold text-white group-hover:text-violet-300 truncate transition-colors">
+                      <span className="text-xs font-bold text-cyan-400 group-hover:text-violet-400 truncate transition-colors">
                         {result.doc.fileName}
                       </span>
                       <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-semibold border border-amber-500/30">
@@ -354,7 +354,7 @@ export const KnowledgeSearchPopover: React.FC<KnowledgeSearchPopoverProps> = ({
                   <button
                     key={idx}
                     onClick={() => onSelectQuery(q)}
-                    className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 font-mono text-[11px] transition-colors cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-400 border border-slate-800 font-mono text-[11px] transition-colors cursor-pointer"
                   >
                     {q}
                   </button>
@@ -373,7 +373,7 @@ export const KnowledgeSearchPopover: React.FC<KnowledgeSearchPopoverProps> = ({
                 <button
                   key={idx}
                   onClick={() => onSelectQuery(q)}
-                  className="px-2.5 py-1 rounded-lg bg-violet-950/20 hover:bg-violet-950/40 text-violet-300 hover:text-white border border-violet-500/20 font-mono text-[11px] transition-colors cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-violet-950/20 hover:bg-violet-950/40 text-violet-400 hover:text-amber-400 border border-violet-500/20 font-mono text-[11px] transition-colors cursor-pointer"
                 >
                   {q}
                 </button>

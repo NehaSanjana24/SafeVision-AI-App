@@ -3,6 +3,7 @@ import {
   compileReportData,
   preventCSVInjection,
   exportReportToCSV,
+  exportSummarizedCompliancePDF,
   OSHA_STANDARDS,
 } from '../reports';
 import { Scan, Violation, Incident, CorrectiveAction } from '../../types';
@@ -22,7 +23,7 @@ describe('Reports Utility (utils/reports.ts)', () => {
     expect(preventCSVInjection('Safe Text')).toBe(`"Safe Text"`);
   });
 
-  it('compiles report data with consistent totals and reconciles false positives', () => {
+  it('compiles report data with consistent totals, reconciles false positives, and generates a summarized PDF blob', async () => {
     const scans: Scan[] = [
       {
         id: 's1',
@@ -94,5 +95,10 @@ describe('Reports Utility (utils/reports.ts)', () => {
 
     const csv = exportReportToCSV(report);
     expect(csv).toContain('NO-Helmet');
+
+    const summaryPdfBlob = await exportSummarizedCompliancePDF(report);
+    expect(summaryPdfBlob).toBeInstanceOf(Blob);
+    expect(summaryPdfBlob.size).toBeGreaterThan(500);
+    expect(summaryPdfBlob.type).toContain('pdf');
   });
 });

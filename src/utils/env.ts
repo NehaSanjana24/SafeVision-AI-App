@@ -66,7 +66,7 @@ export function getGeminiApiKey(): string | undefined {
 }
 
 export function getGeminiModel(): string {
-  return getEnv('VITE_GEMINI_MODEL') || 'gemini-2.5-flash';
+  return getEnv('VITE_GEMINI_MODEL') || 'gemini-4-hydrogen';
 }
 
 /**

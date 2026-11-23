@@ -83,7 +83,7 @@ export const RAGEvalModal: React.FC<RAGEvalModalProps> = ({
               <BarChart2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+              <h3 className="text-base font-semibold text-purple-400 flex items-center gap-2">
                 <span>RAG Retrieval & Grounding Evaluation</span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20">
                   12 Golden Questions
@@ -134,11 +134,11 @@ export const RAGEvalModal: React.FC<RAGEvalModalProps> = ({
                 type="button"
                 onClick={handleStartEvaluation}
                 disabled={isRunning}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white shadow-md shadow-purple-600/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-yellow-200 shadow-md shadow-purple-600/20 transition-all cursor-pointer"
               >
                 {isRunning ? (
                   <>
-                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-3.5 h-3.5 border-2 border-yellow-200/30 border-t-yellow-200 rounded-full animate-spin" />
                     <span>Testing ({progress.current}/{progress.total})...</span>
                   </>
                 ) : (

@@ -105,7 +105,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
         <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center mb-4 shadow-lg shadow-violet-950/20">
           <FileText className="w-8 h-8" />
         </div>
-        <h3 className="text-base font-bold text-white">No Document Selected</h3>
+        <h3 className="text-base font-bold text-violet-400">No Document Selected</h3>
         <p className="text-xs text-slate-400 max-w-sm mt-1">
           Select a file from the uploaded documents list on the left, or upload a safety manual, inspection CSV, or OSHA standard.
         </p>
@@ -140,7 +140,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-violet-500/20 text-violet-400 border border-violet-500/30">
               {doc.fileType.toUpperCase()}
             </span>
-            <h3 className="text-sm font-bold text-white truncate max-w-md" title={doc.fileName}>
+            <h3 className="text-sm font-bold text-cyan-400 truncate max-w-md" title={doc.fileName}>
               {doc.fileName}
             </h3>
           </div>
@@ -172,7 +172,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               onClick={() => setActiveTab('document')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'document'
-                  ? 'bg-violet-700 text-white shadow-md shadow-violet-950/30 font-semibold'
+                  ? 'bg-violet-700 text-yellow-200 shadow-md shadow-violet-950/30 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -182,12 +182,12 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               onClick={() => setActiveTab('extracted')}
               className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'extracted'
-                  ? 'bg-violet-700 text-white shadow-md shadow-violet-950/30 font-semibold'
+                  ? 'bg-violet-700 text-yellow-200 shadow-md shadow-violet-950/30 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <span>Extracted info</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-slate-950 text-[10px] font-mono">
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-950 text-cyan-400 text-[10px] font-mono">
                 {fields.length}
               </span>
             </button>
@@ -195,7 +195,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               onClick={() => setActiveTab('chunks')}
               className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                 activeTab === 'chunks'
-                  ? 'bg-violet-700 text-white shadow-md shadow-violet-950/30 font-semibold'
+                  ? 'bg-violet-700 text-yellow-200 shadow-md shadow-violet-950/30 font-semibold'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -208,7 +208,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               <button
                 onClick={() => setZoomLevel((z) => Math.max(60, z - 15))}
                 title="Zoom Out"
-                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-amber-400"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
@@ -218,14 +218,14 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
               <button
                 onClick={() => setZoomLevel((z) => Math.min(180, z + 15))}
                 title="Zoom In"
-                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-amber-400"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => setZoomLevel(100)}
                 title="Reset Zoom"
-                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
+                className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-amber-400"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>
@@ -360,12 +360,12 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
                       key={chunk.id}
                       className={`p-3.5 rounded-xl border transition-colors ${
                         isMatched
-                          ? 'border-amber-500/50 bg-amber-950/20 text-amber-100 ring-2 ring-amber-500/20'
+                          ? 'border-amber-500/50 bg-amber-950/20 text-amber-300 ring-2 ring-amber-500/20'
                           : 'border-slate-800/80 bg-slate-950/50'
                       }`}
                     >
                       {chunk.sectionTitle && (
-                        <h4 className="font-bold text-white text-xs uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                        <h4 className="font-bold text-indigo-400 text-xs uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-[#7C5CFF]" />
                           <span>{chunk.sectionTitle}</span>
                         </h4>
@@ -384,7 +384,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
           <div className="space-y-6">
             <div className="flex items-center justify-between pb-2 border-b border-slate-800">
               <div>
-                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <h4 className="text-sm font-bold text-violet-400 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#7C5CFF]" />
                   <span>Structured Compliance Rules Extracted by AI</span>
                 </h4>
@@ -416,7 +416,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
                         key={field.id}
                         className={`p-4 rounded-xl border text-xs transition-all ${
                           field.reviewStatus === 'confirmed'
-                            ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-100'
+                            ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-300'
                             : field.reviewStatus === 'rejected'
                             ? 'bg-slate-900/40 border-slate-800 opacity-60 text-slate-400'
                             : 'bg-slate-900/80 border-slate-800 text-slate-200 hover:border-slate-700'
@@ -425,7 +425,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-bold text-white tracking-wide">
+                              <span className="font-bold text-blue-400 tracking-wide">
                                 {field.label}
                               </span>
                               <span
@@ -449,13 +449,13 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
                                 <textarea
                                   value={editValue}
                                   onChange={(e) => setEditValue(e.target.value)}
-                                  className="w-full p-2.5 rounded-lg bg-slate-950 border border-violet-500 text-xs text-white focus:outline-none"
+                                  className="w-full p-2.5 rounded-lg bg-slate-950 border border-violet-500 text-xs text-cyan-400 focus:outline-none"
                                   rows={3}
                                 />
                                 <div className="flex items-center gap-2">
                                   <button
                                     onClick={() => handleReviewStatus(field.id, 'confirmed', editValue)}
-                                    className="px-3 py-1 rounded bg-[#7C5CFF] text-white font-bold text-xs"
+                                    className="px-3 py-1 rounded bg-[#7C5CFF] text-yellow-200 font-bold text-xs"
                                   >
                                     Save &amp; Confirm
                                   </button>
@@ -533,7 +533,7 @@ export const DocumentViewer: React.FC<DocumentViewerProps> = ({
           <div className="space-y-4">
             <div className="pb-2 border-b border-slate-800 flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
                   <Layers className="w-4 h-4 text-[#7C5CFF]" />
                   <span>Document Chunks &amp; Vector Embeddings ({chunks.length} Units)</span>
                 </h4>

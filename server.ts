@@ -175,7 +175,7 @@ For each detected object, provide:
 Be thorough and accurate. Detect workers clearly and whether they wear their hardhats/helmets, high-vis vests, goggles, masks, and gloves.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: {
         parts: [
           {
@@ -255,7 +255,7 @@ Be thorough and accurate. Detect workers clearly and whether they wear their har
       detections,
       image_width: imageWidth,
       image_height: imageHeight,
-      source: 'gemini-3.8-flash',
+      source: 'gemini-4-hydrogen',
     });
   } catch (err: any) {
     console.error('Detection error:', err);
@@ -299,7 +299,7 @@ Format the response as JSON with:
 2. "recommendations": An array of 3-4 specific, high-impact tactical recommendations to eliminate safety hazards and boost compliance.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -427,8 +427,9 @@ app.post('/api/chat/message', async (req, res) => {
       ragContext = [],
     } = req.body;
 
-    const validModels = ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-4-argon'];
-    const model = validModels.includes(requestedModel) ? requestedModel : 'gemini-3.8-flash';
+    const validModels = ['gemini-4-hydrogen', 'gemini-3.1-flash-lite', 'gemini-4-argon'];
+    const normalizedRequested = requestedModel === 'gemini-3.8-flash' ? 'gemini-4-hydrogen' : requestedModel;
+    const model = validModels.includes(normalizedRequested) ? normalizedRequested : 'gemini-4-hydrogen';
 
     let systemInstruction = customInstruction || '';
     if (!systemInstruction) {
@@ -588,7 +589,13 @@ app.post('/api/knowledge/embed', async (req, res) => {
       });
     }
 
-    const modelName = process.env.VITE_GEMINI_EMBED_MODEL || 'text-embedding-004';
+    const rawEmbedModel = (process.env.VITE_GEMINI_EMBED_MODEL || '').trim();
+    const modelName =
+      !rawEmbedModel ||
+      rawEmbedModel.toLowerCase() === 'disabled' ||
+      rawEmbedModel === 'text-embedding-004'
+        ? 'gemini-embedding-2'
+        : rawEmbedModel;
     const embeddings: number[][] = [];
 
     // Process in batches of 6
@@ -600,7 +607,7 @@ app.post('/api/knowledge/embed', async (req, res) => {
             model: modelName,
             contents: text.slice(0, 2000),
           });
-          return (resp as any).embedding?.values || (resp as any).embeddings?.[0]?.values || [];
+          return (resp as any).embeddings?.[0]?.values || (resp as any).embedding?.values || [];
         } catch (e) {
           console.warn('Embed chunk error:', e);
           return [];
@@ -654,7 +661,7 @@ Return an array of extracted fields matching the JSON schema. Each field must ha
 - confidence: float between 0.70 and 0.99`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -708,7 +715,7 @@ app.post('/api/knowledge/ocr', async (req, res) => {
 
     const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: {
         parts: [
           { inlineData: { data: cleanBase64, mimeType } },
@@ -769,7 +776,7 @@ ${contextText}
 ANSWER:`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-4-hydrogen',
       contents: prompt,
     });
 

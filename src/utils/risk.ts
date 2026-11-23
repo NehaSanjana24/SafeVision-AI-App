@@ -237,3 +237,65 @@ export function computeAllZonesRisk(params: {
     };
   });
 }
+
+export interface CameraRiskScore {
+  cameraId: string;
+  score: number;
+  band: RiskBand;
+  components: {
+    severityRate: number;
+    repeatRate: number;
+    openIncidentLoad: number;
+    trendWorsening: number;
+  };
+  weights: RiskWeights;
+  rawStats: {
+    totalViolations: number;
+    severityWeightedSum: number;
+    repeatViolationsCount: number;
+    openIncidentsCount: number;
+    priorPeriodViolations: number;
+    currentPeriodViolations: number;
+    trendDeltaPct: number;
+  };
+}
+
+/**
+ * Computes 0 - 100 Risk Scores per camera.
+ */
+export function computeAllCamerasRisk(params: {
+  violations: Violation[];
+  scans: Scan[];
+  incidents: Incident[];
+  priorViolations: Violation[];
+  weights?: RiskWeights;
+}): CameraRiskScore[] {
+  const defaultCams = ['CAM-01', 'CAM-02', 'CAM-03', 'CAM-04', 'CAM-05', 'CAM-06'];
+  const discoveredCams = new Set<string>(defaultCams);
+  for (const s of params.scans) if (s.cameraId) discoveredCams.add(s.cameraId);
+  for (const v of params.violations) if (v.cameraId) discoveredCams.add(v.cameraId);
+
+  return Array.from(discoveredCams).map((cameraId) => {
+    const camViolations = params.violations.filter((v) => v.cameraId === cameraId);
+    const camScans = params.scans.filter((s) => s.cameraId === cameraId);
+    const camIncidents = params.incidents.filter((inc) => inc.cameraId === cameraId);
+    const priorCamViolations = params.priorViolations.filter((v) => v.cameraId === cameraId);
+
+    const result = computeRiskScore({
+      violations: camViolations,
+      scans: camScans,
+      incidents: camIncidents,
+      priorPeriodViolationsCount: priorCamViolations.length,
+      weights: params.weights,
+    });
+
+    return {
+      cameraId,
+      score: result.score,
+      band: result.band,
+      components: result.components,
+      weights: result.weights,
+      rawStats: result.rawStats,
+    };
+  });
+}

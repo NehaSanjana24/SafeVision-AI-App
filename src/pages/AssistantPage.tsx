@@ -61,7 +61,7 @@ export const AssistantPage: React.FC = () => {
   const agentName = settings.agentName || 'SafeVision Agent';
 
   // Multi-turn Model & Persona State
-  const [selectedModel, setSelectedModel] = useState<'gemini-3.8-flash' | 'gemini-3.1-flash-lite' | 'gemini-4-argon'>('gemini-3.8-flash');
+  const [selectedModel, setSelectedModel] = useState<'gemini-4-hydrogen' | 'gemini-3.1-flash-lite' | 'gemini-4-argon'>('gemini-4-hydrogen');
   const [selectedRole, setSelectedRole] = useState<'osha' | 'inspector' | 'investigator'>('osha');
 
   // Conversations
@@ -405,7 +405,7 @@ export const AssistantPage: React.FC = () => {
           <button
             type="button"
             onClick={createNewConversation}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-sm transition-all"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-yellow-200 shadow-sm transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>New Chat</span>
@@ -545,7 +545,7 @@ export const AssistantPage: React.FC = () => {
 
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-xs sm:text-sm font-bold text-slate-100 truncate">{agentName}</h2>
+                <h2 className="text-xs sm:text-sm font-bold text-purple-400 truncate">{agentName}</h2>
                 <AgentStatusChip status={status} currentTool={currentTool} />
                 <span
                   className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
@@ -594,8 +594,8 @@ export const AssistantPage: React.FC = () => {
                 className="bg-transparent text-[11px] font-mono text-purple-300 focus:outline-none cursor-pointer pr-1"
                 title="Select Gemini model"
               >
-                <option value="gemini-3.8-flash" className="bg-slate-900 text-slate-200">
-                  gemini-3.8-flash (General)
+                <option value="gemini-4-hydrogen" className="bg-slate-900 text-slate-200">
+                  gemini-4-hydrogen (General)
                 </option>
                 <option value="gemini-3.1-flash-lite" className="bg-slate-900 text-slate-200">
                   gemini-3.1-flash-lite (Fast)
@@ -688,11 +688,14 @@ export const AssistantPage: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 custom-scrollbar">
           {messages.length === 0 && !streamingTokens && (
             <div className="h-full flex flex-col items-center justify-center max-w-xl mx-auto text-center py-8">
-              <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 shadow-lg shadow-purple-500/5">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-500/15 via-violet-500/15 to-rose-500/15 border border-violet-500/30 flex items-center justify-center text-violet-400 mb-4 shadow-lg shadow-violet-500/10">
                 <Shield className="w-7 h-7" />
               </div>
-              <h3 className="text-base font-bold text-slate-100">
-                SafeVision AI Workplace Safety Copilot
+              <h3 className="text-base font-bold text-indigo-400">
+                <span className="font-extrabold bg-gradient-to-r from-blue-600 via-violet-600 to-rose-600 dark:from-cyan-300 dark:via-violet-400 dark:to-amber-300 bg-clip-text text-transparent">
+                  SafeVision AI
+                </span>{' '}
+                Workplace Safety Copilot
               </h3>
               <p className="text-xs text-slate-400 mt-1.5 max-w-md leading-relaxed">
                 Ask about OSHA 1926/1910 standards, analyze jobsite CCTV scans, verify zone PPE
@@ -781,13 +784,13 @@ export const AssistantPage: React.FC = () => {
                   <div
                     className={`p-4 rounded-2xl shadow-sm text-xs sm:text-sm leading-relaxed ${
                       isUser
-                        ? 'bg-purple-600 text-white rounded-tr-none'
-                        : 'bg-slate-900/90 border border-slate-800 text-slate-200 rounded-tl-none'
+                        ? 'bg-purple-600 text-yellow-200 rounded-tr-none'
+                        : 'bg-slate-900/90 border border-slate-800 text-sky-400 rounded-tl-none'
                     }`}
                   >
                     {/* Attached Image Preview if User */}
                     {isUser && msg.attachment?.base64 && (
-                      <div className="mb-2.5 rounded-lg overflow-hidden border border-white/20 max-w-xs">
+                      <div className="mb-2.5 rounded-lg overflow-hidden border border-purple-300/30 max-w-xs">
                         <img
                           src={msg.attachment.base64}
                           alt={msg.attachment.name || 'Attachment'}
@@ -962,7 +965,7 @@ export const AssistantPage: React.FC = () => {
               <button
                 type="button"
                 onClick={handleStop}
-                className="p-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-sm transition-colors shrink-0"
+                className="p-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-yellow-200 shadow-sm transition-colors shrink-0"
                 title="Stop execution"
               >
                 <Square className="w-4 h-4" />
@@ -972,7 +975,7 @@ export const AssistantPage: React.FC = () => {
                 type="button"
                 onClick={() => handleSend()}
                 disabled={!inputText.trim() && !attachedImage}
-                className="p-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:hover:bg-purple-600 text-white shadow-sm transition-all shrink-0 cursor-pointer"
+                className="p-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:hover:bg-purple-600 text-yellow-200 shadow-sm transition-all shrink-0 cursor-pointer"
                 title="Send message"
               >
                 <Send className="w-4 h-4" />

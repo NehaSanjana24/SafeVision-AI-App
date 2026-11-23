@@ -1,9 +1,18 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { Notification, AlertRule } from '../types';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { Notification, AlertRule, ReportRecord } from '../types';
 import { repository } from '../services/storage';
 import { useAuth } from './AuthContext';
-import { evaluateAlertRules, computeExecutiveKPIs, filterViolations, filterScans, filterIncidents, resolveDateWindow } from '../utils/analytics';
+import {
+  evaluateAlertRules,
+  computeExecutiveKPIs,
+  filterViolations,
+  filterScans,
+  filterIncidents,
+  resolveDateWindow,
+} from '../utils/analytics';
 import { computeAllZonesRisk } from '../utils/risk';
+import { compileReportData, exportReportToPDF } from '../utils/reports';
+import { getAlertWebhookUrl } from '../utils/env';
 
 interface NotificationContextType {
   notifications: Notification[];
@@ -15,6 +24,7 @@ interface NotificationContextType {
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: string) => Promise<void>;
   triggerRuleEvaluation: () => Promise<void>;
+  runDueReportSchedulesNow: () => Promise<number>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -23,7 +33,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const { currentUser } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
+  const scheduleRunningRef = useRef(false);
 
   const refreshNotifications = useCallback(async () => {
     try {
@@ -55,59 +66,156 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
+  const runDueReportSchedulesNow = useCallback(async (forceAll = false): Promise<number> => {
+    if (scheduleRunningRef.current) return 0;
+    scheduleRunningRef.current = true;
+    let generatedCount = 0;
+
+    try {
+      const schedules = await repository.getAllReportSchedules();
+      const nowMs = Date.now();
+      const due = schedules.filter(
+        (s) => forceAll || new Date(s.nextDueAt).getTime() <= nowMs
+      );
+      if (due.length === 0) return 0;
+
+      const [scans, violations, incidents, actions] = await Promise.all([
+        repository.getAllScans(),
+        repository.getAllViolations(),
+        repository.getAllIncidents(),
+        repository.getAllCorrectiveActions(),
+      ]);
+
+      const settings = repository.getSettings();
+      const zoneRisks = computeAllZonesRisk({
+        violations,
+        scans,
+        incidents,
+        priorViolations: [],
+        weights: settings.riskWeights,
+      });
+
+      for (const sched of due) {
+        const compiled = compileReportData({
+          type: sched.type,
+          parameters: sched.parameters,
+          scans,
+          violations,
+          incidents,
+          actions,
+          zoneRisks,
+          userEmail: sched.createdBy || currentUser?.email || 'scheduler@safevision.ai',
+        });
+
+        let pdfBlob: Blob | undefined;
+        try {
+          pdfBlob = await exportReportToPDF(compiled);
+        } catch {
+          // Headless/mocked test environments may not have canvas context
+        }
+
+        const record: ReportRecord = {
+          id: compiled.reportId,
+          type: compiled.type,
+          title: `${compiled.title} (Scheduled ${sched.frequency})`,
+          parameters: compiled.parameters,
+          summary: compiled.aiNarrative.executiveSummary,
+          createdBy: sched.createdBy || currentUser?.email || 'scheduler@safevision.ai',
+          createdAt: new Date().toISOString(),
+          status: 'generated',
+          reportData: compiled,
+        };
+
+        await repository.saveReport(record);
+        if (pdfBlob) {
+          await repository.saveReportBlob(record.id, pdfBlob);
+        }
+
+        // Advance schedule nextDueAt
+        const nextDate = new Date();
+        if (sched.frequency === 'daily') nextDate.setDate(nextDate.getDate() + 1);
+        else if (sched.frequency === 'weekly') nextDate.setDate(nextDate.getDate() + 7);
+        else nextDate.setMonth(nextDate.getMonth() + 1);
+
+        await repository.saveReportSchedule({
+          ...sched,
+          lastRunAt: new Date().toISOString(),
+          nextDueAt: nextDate.toISOString(),
+        });
+
+        // Bell notification
+        await repository.saveNotification({
+          id: `notif_sched_${Date.now()}_${sched.id}`,
+          userId: currentUser?.id || 'admin-001',
+          title: `Ready: Scheduled ${sched.frequency} report`,
+          body: `${record.title} generated with ${compiled.kpis.overallCompliancePct}% compliance across ${compiled.kpis.totalScans} scans.`,
+          severity: 'info',
+          read: false,
+          createdAt: new Date().toISOString(),
+          link: '/reports?tab=history',
+        });
+
+        // Optional webhook delivery
+        const webhookUrl = settings.alertWebhookUrl || getAlertWebhookUrl();
+        if (webhookUrl && sched.emailSummary !== false) {
+          fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'scheduled_report_ready',
+              reportId: record.id,
+              title: record.title,
+              frequency: sched.frequency,
+              recipient: settings.supervisorEmail || sched.createdBy,
+              kpis: compiled.kpis,
+              summary: compiled.aiNarrative.executiveSummary,
+              timestamp: new Date().toISOString(),
+            }),
+          }).catch(() => {});
+        }
+
+        generatedCount++;
+      }
+
+      if (generatedCount > 0) {
+        await refreshNotifications();
+      }
+    } catch (err) {
+      console.warn('Scheduled report execution warning:', err);
+    } finally {
+      scheduleRunningRef.current = false;
+    }
+
+    return generatedCount;
+  }, [currentUser?.email, currentUser?.id, refreshNotifications]);
+
   const triggerRuleEvaluation = useCallback(async () => {
     try {
-      const [scans, violations, incidents, rules, recentNotifs] = await Promise.all([
+      const [scans, violations, incidents, rules, recentNotifs, docs, workflowRuns] = await Promise.all([
         repository.getAllScans(),
         repository.getAllViolations(),
         repository.getAllIncidents(),
         repository.getAllAlertRules(),
         repository.getAllNotifications(currentUser?.id),
+        repository.getAllDocuments(),
+        repository.getAllWorkflowRuns(),
       ]);
 
+      const settings = repository.getSettings();
       const window = resolveDateWindow('30d');
-      const filteredViols = filterViolations(
-        violations,
-        {
-          dateRange: '30d',
-          zone: 'all',
-          camera: 'all',
-          source: 'all',
-          violationClass: 'all',
-          severity: 'all',
-          incidentStatus: 'all',
-          comparePrevious: true,
-        },
-        window
-      );
-      const filteredScans = filterScans(
-        scans,
-        {
-          dateRange: '30d',
-          zone: 'all',
-          camera: 'all',
-          source: 'all',
-          violationClass: 'all',
-          severity: 'all',
-          incidentStatus: 'all',
-          comparePrevious: true,
-        },
-        window
-      );
-      const filteredIncs = filterIncidents(
-        incidents,
-        {
-          dateRange: '30d',
-          zone: 'all',
-          camera: 'all',
-          source: 'all',
-          violationClass: 'all',
-          severity: 'all',
-          incidentStatus: 'all',
-          comparePrevious: true,
-        },
-        window
-      );
+      const defaultFilters = {
+        dateRange: '30d' as const,
+        zone: 'all' as const,
+        camera: 'all',
+        source: 'all' as const,
+        violationClass: 'all',
+        severity: 'all' as const,
+        incidentStatus: 'all' as const,
+        comparePrevious: true,
+      };
+      const filteredViols = filterViolations(violations, defaultFilters, window);
+      const filteredScans = filterScans(scans, defaultFilters, window);
+      const filteredIncs = filterIncidents(incidents, defaultFilters, window);
 
       const kpis = computeExecutiveKPIs({
         currentViolations: filteredViols.current,
@@ -116,7 +224,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         priorScans: filteredScans.prior,
         currentIncidents: filteredIncs.current,
         priorIncidents: filteredIncs.prior,
-        hasPolicyKnowledge: true,
+        hasPolicyKnowledge: docs.length > 0,
+        workflowRuns,
       });
 
       const zoneRisks = computeAllZonesRisk({
@@ -124,6 +233,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         scans: filteredScans.current,
         incidents: filteredIncs.current,
         priorViolations: filteredViols.prior,
+        weights: settings.riskWeights,
       });
 
       const evaluation = evaluateAlertRules({
@@ -142,10 +252,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           await repository.saveAlertRule(rule);
         }
 
-        // Webhook notification if configured
-        const settings = repository.getSettings();
-        if (settings.alertWebhookUrl) {
-          fetch(settings.alertWebhookUrl, {
+        const webhookUrl = settings.alertWebhookUrl || getAlertWebhookUrl();
+        if (webhookUrl) {
+          fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -163,12 +272,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [currentUser?.id, refreshNotifications]);
 
-  // Periodic rule evaluation check
+  // Periodic rule evaluation & due schedule checks
   useEffect(() => {
     triggerRuleEvaluation();
-    const interval = setInterval(triggerRuleEvaluation, 120000); // every 2 minutes
+    runDueReportSchedulesNow(false);
+    const interval = setInterval(() => {
+      triggerRuleEvaluation();
+      runDueReportSchedulesNow(false);
+    }, 120000);
     return () => clearInterval(interval);
-  }, [triggerRuleEvaluation]);
+  }, [triggerRuleEvaluation, runDueReportSchedulesNow]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -184,6 +297,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         markAllAsRead,
         deleteNotification,
         triggerRuleEvaluation,
+        runDueReportSchedulesNow: () => runDueReportSchedulesNow(false),
       }}
     >
       {children}

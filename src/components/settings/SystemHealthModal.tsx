@@ -239,7 +239,7 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ isOpen, on
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-slate-100">
+                <h2 className="text-base sm:text-lg font-bold text-amber-400">
                   System Health & Diagnostic Center
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -254,7 +254,7 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ isOpen, on
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            className="p-2 text-slate-400 hover:text-amber-400 rounded-lg hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>

@@ -95,7 +95,7 @@ export const repository = {
     const violations = await this.getAllViolations();
     for (const v of violations) {
       if (v.scanId === id) {
-        await idbDelete('violations', v.id);
+        await this.deleteViolation(v.id);
       }
     }
   },
@@ -116,7 +116,11 @@ export const repository = {
     try {
       await idbPut('violations', violation);
     } catch (err) {
-      console.warn('IDB put violation failed', err);
+      console.warn('IDB put violation failed, storing in localStorage fallback', err);
+      const existing = await this.getAllViolations();
+      const updated = [violation, ...existing.filter((v) => v.id !== violation.id)];
+      const light = updated.map((v) => ({ ...v, evidenceImage: undefined }));
+      localStorage.setItem('safevision_violations_fallback', JSON.stringify(light.slice(0, 100)));
     }
   },
 
@@ -125,6 +129,11 @@ export const repository = {
       await idbDelete('violations', id);
     } catch (err) {
       console.error(err);
+      const existing = await this.getAllViolations();
+      localStorage.setItem(
+        'safevision_violations_fallback',
+        JSON.stringify(existing.filter((v) => v.id !== id))
+      );
     }
   },
 
@@ -197,6 +206,26 @@ export const repository = {
       return updatedViolation;
     } catch (err) {
       console.error('Failed to unflag false positive:', err);
+      return null;
+    }
+  },
+
+  async toggleViolationResolved(violationId: string, resolved?: boolean): Promise<Violation | null> {
+    try {
+      const violations = await this.getAllViolations();
+      const target = violations.find((v) => v.id === violationId);
+      if (!target) return null;
+
+      const nextResolved = resolved !== undefined ? resolved : !Boolean(target.resolved);
+      const updatedViolation: Violation = {
+        ...target,
+        resolved: nextResolved,
+      };
+
+      await this.saveViolation(updatedViolation);
+      return updatedViolation;
+    } catch (err) {
+      console.error('Failed to toggle violation resolved status:', err);
       return null;
     }
   },
@@ -892,7 +921,8 @@ export const repository = {
       const items = await idbGetAll<Incident>('incidents');
       return items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch {
-      return [];
+      const raw = localStorage.getItem('safevision_incidents_fallback');
+      return raw ? JSON.parse(raw) : [];
     }
   },
 
@@ -900,7 +930,8 @@ export const repository = {
     try {
       return await idbGet<Incident>('incidents', id);
     } catch {
-      return undefined;
+      const all = await this.getAllIncidents();
+      return all.find((i) => i.id === id);
     }
   },
 
@@ -908,7 +939,10 @@ export const repository = {
     try {
       await idbPut('incidents', incident);
     } catch (err) {
-      console.warn('IDB put incident failed:', err);
+      console.warn('IDB put incident failed, storing in localStorage fallback', err);
+      const existing = await this.getAllIncidents();
+      const updated = [incident, ...existing.filter((i) => i.id !== incident.id)];
+      localStorage.setItem('safevision_incidents_fallback', JSON.stringify(updated.slice(0, 100)));
     }
   },
 
@@ -930,6 +964,13 @@ export const repository = {
       await idbDelete('incidents', id);
     } catch (err) {
       console.warn('Delete incident failed:', err);
+    }
+    const existing = await this.getAllIncidents();
+    if (existing.some((i) => i.id === id)) {
+      localStorage.setItem(
+        'safevision_incidents_fallback',
+        JSON.stringify(existing.filter((i) => i.id !== id))
+      );
     }
   },
 
@@ -1387,6 +1428,39 @@ export const repository = {
     }
 
     return { deletedCount };
+  },
+
+  async getCollectionCounts(): Promise<{
+    scans: number;
+    violations: number;
+    incidents: number;
+    corrective_actions: number;
+    knowledge_docs: number;
+    reports: number;
+    notifications: number;
+    alert_rules: number;
+  }> {
+    const [scans, violations, incidents, actions, docs, reports, notifications, rules] =
+      await Promise.all([
+        this.getAllScans(),
+        this.getAllViolations(),
+        this.getAllIncidents(),
+        this.getAllCorrectiveActions(),
+        this.getAllDocuments(),
+        this.getAllReports(),
+        this.getAllNotifications(),
+        this.getAllAlertRules(),
+      ]);
+    return {
+      scans: scans.length,
+      violations: violations.length,
+      incidents: incidents.length,
+      corrective_actions: actions.length,
+      knowledge_docs: docs.length,
+      reports: reports.length,
+      notifications: notifications.length,
+      alert_rules: rules.length,
+    };
   },
 };
 

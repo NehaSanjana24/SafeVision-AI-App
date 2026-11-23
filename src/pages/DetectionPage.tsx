@@ -41,6 +41,7 @@ import { CustomModelModal } from '../components/model/CustomModelModal';
 import { PolicyDrawer } from '../components/knowledge/PolicyDrawer';
 import { RAGEvalModal } from '../components/settings/RAGEvalModal';
 import { knowledgeService } from '../services/knowledge';
+import { validateUploadedFile } from '../utils/security';
 
 // Sample demonstration video for instant testing
 const DEMO_VIDEOS = [
@@ -120,6 +121,14 @@ export const DetectionPage: React.FC = () => {
   const [yoloElapsedSeconds, setYoloElapsedSeconds] = useState(0);
   const [serverHealth, setServerHealth] = useState<'checking' | 'online' | 'waking' | 'offline'>('checking');
   const abortExtractRef = useRef<AbortController | null>(null);
+  const imageDetectAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortExtractRef.current?.abort();
+      imageDetectAbortRef.current?.abort();
+    };
+  }, []);
 
   // Pre-warm backend & check health when video tab is selected
   useEffect(() => {
@@ -250,19 +259,25 @@ export const DetectionPage: React.FC = () => {
 
   // Run image detection
   const runImageDetection = async (imgSource: string | Blob, fileName = 'inspection.jpg') => {
+    imageDetectAbortRef.current?.abort();
+    const controller = new AbortController();
+    imageDetectAbortRef.current = controller;
+
     setDetectingImage(true);
     setLastViolationResult(null);
 
     try {
       let blob: Blob;
       if (typeof imgSource === 'string') {
-        const resp = await fetch(imgSource);
+        const resp = await fetch(imgSource, { signal: controller.signal });
         blob = await resp.blob();
       } else {
         blob = imgSource;
       }
 
-      const result: DetectionResult = await detector.detect(blob, settings.confidenceThreshold);
+      const result: DetectionResult = await detector.detect(blob, settings.confidenceThreshold, {
+        signal: controller.signal,
+      });
       setImageDetections(result.detections);
 
       // Generate scan ID and evaluate violations
@@ -326,23 +341,31 @@ export const DetectionPage: React.FC = () => {
   };
 
   // Image Drag & Drop handlers
-  const handleImageDrop = (e: React.DragEvent) => {
+  const handleImageDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      if (file.type.startsWith('image/')) {
-        const url = URL.createObjectURL(file);
-        setImageFile(file);
-        setSelectedImage(url);
-        setImageDetections([]);
-        setLastViolationResult(null);
+      const check = await validateUploadedFile(file, 'image');
+      if (!check.valid) {
+        addToast('error', 'Invalid Image File', check.error || 'Unsupported file.');
+        return;
       }
+      const url = URL.createObjectURL(file);
+      setImageFile(file);
+      setSelectedImage(url);
+      setImageDetections([]);
+      setLastViolationResult(null);
     }
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      const check = await validateUploadedFile(file, 'image');
+      if (!check.valid) {
+        addToast('error', 'Invalid Image File', check.error || 'Unsupported file.');
+        return;
+      }
       const url = URL.createObjectURL(file);
       setImageFile(file);
       setSelectedImage(url);
@@ -352,7 +375,12 @@ export const DetectionPage: React.FC = () => {
   };
 
   // Video Select & Drag/Drop
-  const handleVideoSelect = (file: File) => {
+  const handleVideoSelect = async (file: File) => {
+    const check = await validateUploadedFile(file, 'video');
+    if (!check.valid) {
+      addToast('error', 'Invalid Video File', check.error || 'Unsupported video format.');
+      return;
+    }
     const url = URL.createObjectURL(file);
     const formatted = formatBytes(file.size);
     const sizeMb = Math.round((file.size / (1024 * 1024)) * 10) / 10;
@@ -629,7 +657,7 @@ export const DetectionPage: React.FC = () => {
       {/* Header & Controls Strip */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
+          <h1 className="text-2xl font-black text-amber-400 tracking-tight flex items-center gap-2.5">
             <ScanEye className="w-6 h-6 text-amber-400" />
             <span>PPE Detection Workspace</span>
           </h1>
@@ -695,7 +723,7 @@ export const DetectionPage: React.FC = () => {
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Sliders className="w-4 h-4 text-amber-400" />
-              <h3 className="text-sm font-bold text-white">Detection Thresholds &amp; Mandatory PPE Rules</h3>
+              <h3 className="text-sm font-bold text-amber-400">Detection Thresholds &amp; Mandatory PPE Rules</h3>
             </div>
             <span className="text-[11px] text-slate-400 font-mono">
               Auto-saved to local repository
@@ -846,7 +874,7 @@ export const DetectionPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowRAGEvalModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-colors shadow-sm cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-yellow-200 font-bold text-xs transition-colors shadow-sm cursor-pointer"
                 >
                   <BarChart2 className="w-3.5 h-3.5" />
                   <span>RAG Benchmark (12 Golden Questions)</span>
@@ -939,11 +967,11 @@ export const DetectionPage: React.FC = () => {
 
       {/* Active Red Violation Alert Banner */}
       {lastViolationResult && lastViolationResult.violations.length > 0 && (
-        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/35 text-rose-100 shadow-lg shadow-rose-950/20 flex flex-col sm:flex-row sm:items-start justify-between gap-4 animate-in fade-in">
+        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/35 text-rose-300 shadow-lg shadow-rose-950/20 flex flex-col sm:flex-row sm:items-start justify-between gap-4 animate-in fade-in">
           <div className="flex items-start gap-3 flex-1">
             <ShieldAlert className="w-6 h-6 text-rose-400 shrink-0 mt-0.5 animate-pulse" />
             <div>
-              <h3 className="font-extrabold text-base text-rose-200">
+              <h3 className="font-extrabold text-base text-rose-400">
                 CRITICAL SAFETY VIOLATION FLAGGED ({lastViolationResult.violations.length})
               </h3>
               <p className="text-xs text-rose-300 mt-1">
@@ -962,7 +990,7 @@ export const DetectionPage: React.FC = () => {
                       )}`
                     );
                   }}
-                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-purple-950/20 cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-yellow-200 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-purple-950/20 cursor-pointer"
                 >
                   <Bot className="w-3.5 h-3.5" />
                   <span>Investigate with Agent</span>
@@ -974,7 +1002,7 @@ export const DetectionPage: React.FC = () => {
                       setSelectedPolicyViolation(firstViol);
                       setShowPolicyDrawer(true);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-violet-600/90 hover:bg-violet-500 text-white text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-violet-950/20 cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg bg-violet-600/90 hover:bg-violet-500 text-yellow-200 text-[11px] font-bold flex items-center gap-1.5 transition-colors shadow-md shadow-violet-950/20 cursor-pointer"
                   >
                     <BookOpen className="w-3.5 h-3.5" />
                     <span>View Safety Policy References</span>
@@ -1107,7 +1135,7 @@ export const DetectionPage: React.FC = () => {
           <div className="lg:col-span-4 space-y-4">
             <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
                   <Layers className="w-4 h-4 text-amber-400" />
                   <span>Detected Objects &amp; PPE</span>
                 </h3>
@@ -1124,7 +1152,7 @@ export const DetectionPage: React.FC = () => {
                     className={`px-2 py-1 rounded-md text-[10px] font-mono font-semibold transition-all ${
                       selectedClassFilter === null
                         ? 'bg-amber-500 text-slate-950'
-                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                        : 'bg-slate-800 text-slate-400 hover:text-amber-400'
                     }`}
                   >
                     All ({imageDetections.length})
@@ -1138,7 +1166,7 @@ export const DetectionPage: React.FC = () => {
                           ? 'bg-amber-500 text-slate-950'
                           : cls.toLowerCase().startsWith('no-')
                           ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                          : 'bg-slate-800 text-slate-400 hover:text-cyan-400'
                       }`}
                     >
                       {cls}
@@ -1261,7 +1289,7 @@ export const DetectionPage: React.FC = () => {
           <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <h3 className="text-base font-bold text-cyan-400 flex items-center gap-2">
                   <VideoIcon className="w-5 h-5 text-amber-400" />
                   <span>Video PPE Detection &amp; Analysis</span>
                 </h3>
@@ -1385,7 +1413,7 @@ export const DetectionPage: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <Zap className="w-5 h-5 text-amber-400 shrink-0" />
                   <div>
-                    <span className="font-bold text-white block">
+                    <span className="font-bold text-amber-300 block">
                       Video File Size: {videoFileSizeStr || `${videoFileSizeMb} MB`}
                     </span>
                     <span className="text-slate-300 text-[11px]">
@@ -1536,7 +1564,7 @@ export const DetectionPage: React.FC = () => {
           {videoTimeline.length > 0 && (
             <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                <h4 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
                   <Play className="w-4 h-4 text-amber-400" />
                   <span>Extracted Frame Timeline ({videoTimeline.length} Samples)</span>
                 </h4>
@@ -1574,11 +1602,11 @@ export const DetectionPage: React.FC = () => {
                           {item.time}s
                         </span>
                         {hasViolations ? (
-                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-rose-600 font-bold text-[9px] text-white">
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-rose-600 font-bold text-[9px] text-yellow-200">
                             {item.violations.length} VIOLATION
                           </span>
                         ) : (
-                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-600/90 font-bold text-[9px] text-white">
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-600/90 font-bold text-[9px] text-yellow-200">
                             CLEAN
                           </span>
                         )}
@@ -1601,7 +1629,7 @@ export const DetectionPage: React.FC = () => {
                     </span>
                     <button
                       onClick={() => setSelectedTimelineItem(null)}
-                      className="text-xs text-slate-400 hover:text-white"
+                      className="text-xs text-slate-400 hover:text-amber-400"
                     >
                       Close Details &times;
                     </button>

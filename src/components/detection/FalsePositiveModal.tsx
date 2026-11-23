@@ -134,7 +134,7 @@ export const FalsePositiveModal: React.FC<FalsePositiveModalProps> = ({
               <Flag className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Flag as False Positive</h3>
+              <h3 className="text-sm font-bold text-amber-400">Flag as False Positive</h3>
               <p className="text-[11px] text-slate-400">
                 Help tune vision confidence and suppress erroneous hazard alerts
               </p>
@@ -142,7 +142,7 @@ export const FalsePositiveModal: React.FC<FalsePositiveModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 bg-slate-800 hover:bg-slate-700 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>

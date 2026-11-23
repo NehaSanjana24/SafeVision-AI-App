@@ -20,6 +20,7 @@ import {
   DocumentFileType,
   CitationItem,
 } from '../types';
+import { recordMetric } from '../utils/logger';
 
 // PDF.js dynamic loading to ensure browser compatibility
 let pdfjsLib: any = null;
@@ -550,6 +551,7 @@ export class KnowledgeService {
    */
   async hybridSearch(query: string, filterDocId?: string): Promise<SearchResultItem[]> {
     if (!query || !query.trim()) return [];
+    const searchStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const cleanQuery = query.trim();
 
     const allDocs = await repository.getAllDocuments();
@@ -641,7 +643,7 @@ export class KnowledgeService {
     // Format results with ~160 character snippet
     const queryTerms = cleanQuery.toLowerCase().split(/\s+/).filter(Boolean);
 
-    return sortedRRF.map((item) => {
+    const results = sortedRRF.map((item) => {
       const doc = docMap.get(item.chunk.docId) || {
         id: item.chunk.docId,
         fileName: 'Document',
@@ -677,7 +679,14 @@ export class KnowledgeService {
         matchTerms: item.matchTerms.length > 0 ? item.matchTerms : queryTerms,
       };
     });
+
+    recordMetric(
+      'rag_retrieval',
+      (typeof performance !== 'undefined' ? performance.now() : Date.now()) - searchStart
+    );
+    return results;
   }
+
 
   /**
    * Grounded Question Answering ("Ask") using Gemini + top retrieved chunks

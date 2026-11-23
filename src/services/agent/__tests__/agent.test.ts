@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { extractEntities } from '../agentService';
+import { StateGraph } from '../../langgraph/stateGraph';
 
 // Zod tool schemas
 const visualInspectorSchema = z.object({
@@ -80,5 +82,26 @@ describe('Agent Tool Schemas & Security Defenses', () => {
 
     expect(verifyGrounding(groundedAnswer, ['chunk_1']).isGrounded).toBe(true);
     expect(verifyGrounding(ungroundedAnswer, ['chunk_1']).isGrounded).toBe(false);
+  });
+
+  it('extracts zone, camera, violation class, and time window entities accurately', () => {
+    const entities = extractEntities('Why was there a NO helmet alert in Zone A on Camera 01 this morning?');
+    expect(entities.zone).toBe('A');
+    expect(entities.camera).toBe('Camera 01');
+    expect(entities.violationType).toBe('NO-Helmet');
+    expect(entities.timePreset).toBe('this_morning');
+  });
+
+  it('executes StateGraph conditional routing and respects step limits', async () => {
+    const graph = new StateGraph<{ route: string; visited: string[] }>({ maxSteps: 5 });
+    graph.addNode('start', async (s) => ({ visited: [...s.visited, 'start'] }));
+    graph.addNode('branch_a', async (s) => ({ visited: [...s.visited, 'branch_a'] }));
+    graph.setEntryPoint('start');
+    graph.addConditionalEdges('start', (s) => (s.route === 'a' ? 'branch_a' : 'END'));
+    graph.addEdge('branch_a', 'END');
+
+    const res = await graph.invoke({ route: 'a', visited: [] });
+    expect(res.stepsExecuted).toBe(2);
+    expect(res.state.visited).toEqual(['start', 'branch_a']);
   });
 });

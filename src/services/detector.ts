@@ -1,5 +1,8 @@
 import { DetectionResult, DetectionBox, PPESettings, Violation } from '../types';
 import { getInferenceApiUrl } from '../utils/env';
+import { downscaleImageBlob, computeBlobKey, getCachedDetection, setCachedDetection } from '../utils/imageCache';
+import { validateDetectionResponse } from '../utils/vision';
+import { recordMetric } from '../utils/logger';
 
 export interface DetectorOptions {
   conf?: number;
@@ -266,22 +269,38 @@ export const detector = {
    * Universal detect interface:
    * detect(imageBlob, conf) -> { detections: [{ class_name, confidence, bbox: [x1,y1,x2,y2] }], image_width, image_height }
    */
-  async detect(imageBlob: Blob, conf: number = 0.4): Promise<DetectionResult> {
+  async detect(imageBlob: Blob, conf: number = 0.4, options?: { signal?: AbortSignal }): Promise<DetectionResult> {
+    const startMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const optimizedBlob = await downscaleImageBlob(imageBlob, 1280);
+    const cacheKey = await computeBlobKey(optimizedBlob, conf);
+    const cached = getCachedDetection(cacheKey);
+    if (cached) {
+      const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startMs;
+      recordMetric('detect_image', elapsed);
+      return cached;
+    }
+
     const inferenceUrl = this.getInferenceUrl();
+    let result: DetectionResult;
 
     // Circuit breaker: If YOLO failed in the last 40 seconds, seamlessly route to Gemini vision
     // This avoids blocking frame extraction or multiple sequential 12s freezes.
     if (inferenceUrl && (Date.now() - lastYoloFailureTimestamp > 40000)) {
-      return this.detectYOLOv8(imageBlob, conf, inferenceUrl);
+      result = await this.detectYOLOv8(optimizedBlob, conf, inferenceUrl, options?.signal);
     } else {
-      return this.detectGemini(imageBlob, conf);
+      result = await this.detectGemini(optimizedBlob, conf, options?.signal);
     }
+
+    setCachedDetection(cacheKey, result);
+    const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startMs;
+    recordMetric('detect_image', elapsed);
+    return result;
   },
 
   /**
    * Mode A: YOLOv8 API (primary)
    */
-  async detectYOLOv8(imageBlob: Blob, conf: number, baseUrl: string): Promise<DetectionResult> {
+  async detectYOLOv8(imageBlob: Blob, conf: number, baseUrl: string, externalSignal?: AbortSignal): Promise<DetectionResult> {
     const formData = new FormData();
     formData.append('file', imageBlob, 'capture.jpg');
 
@@ -291,6 +310,8 @@ export const detector = {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4500); // 4.5s snappy timeout
+      const onExternalAbort = () => controller.abort();
+      externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -298,21 +319,29 @@ export const detector = {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
+      externalSignal?.removeEventListener('abort', onExternalAbort);
 
       if (!response.ok) {
         throw new Error(`YOLOv8 inference API responded with status ${response.status}`);
       }
 
-      const data: DetectionResult = await response.json();
+      const rawJson = await response.json();
+      const validated = validateDetectionResponse(rawJson);
+      if (!validated.valid || !validated.data) {
+        throw new Error(`Invalid inference payload: ${validated.error || 'schema mismatch'}`);
+      }
       lastYoloFailureTimestamp = 0; // Success: reset circuit breaker
       return {
-        ...data,
+        ...validated.data,
         source: 'YOLOv8 API',
       };
     } catch (err: any) {
+      if (externalSignal?.aborted) {
+        throw err;
+      }
       lastYoloFailureTimestamp = Date.now();
       console.warn('YOLOv8 API error, seamlessly falling back to Gemini vision:', err.message);
-      const fallbackResult = await this.detectGemini(imageBlob, conf);
+      const fallbackResult = await this.detectGemini(imageBlob, conf, externalSignal);
       return {
         ...fallbackResult,
         warning: `YOLOv8 server was slow or unavailable (${err.message}). Instant fallback to Gemini vision applied.`,
@@ -323,7 +352,7 @@ export const detector = {
   /**
    * Mode B: Gemini vision (fallback)
    */
-  async detectGemini(imageBlob: Blob, conf: number): Promise<DetectionResult> {
+  async detectGemini(imageBlob: Blob, conf: number, externalSignal?: AbortSignal): Promise<DetectionResult> {
     const dims = await getImageDimensions(imageBlob);
     const base64Data = await blobToBase64(imageBlob);
 
@@ -333,6 +362,8 @@ export const detector = {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const onExternalAbort = () => controller.abort();
+        externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
 
         const response = await fetch('/api/detect/gemini', {
           method: 'POST',
@@ -347,6 +378,7 @@ export const detector = {
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
+        externalSignal?.removeEventListener('abort', onExternalAbort);
 
         if (!response.ok) {
           throw new Error(`Vision detector returned status ${response.status}`);
@@ -355,6 +387,9 @@ export const detector = {
         const result: DetectionResult = await response.json();
         return result;
       } catch (err: any) {
+        if (externalSignal?.aborted) {
+          throw err;
+        }
         lastError = err;
         console.warn(`Gemini detection attempt ${attempt + 1} error:`, err);
         if (attempt === 1) {
@@ -490,27 +525,27 @@ export const detector = {
     const getColor = (className: string) => {
       const cls = className.toLowerCase();
       if (cls.startsWith('no-') || cls.startsWith('missing') || cls.includes('without')) {
-        return { border: '#de6666', fill: 'rgba(222, 102, 102, 0.16)', text: '#ffffff', tag: '#b84747' };
+        return { border: '#de6666', fill: 'rgba(222, 102, 102, 0.16)', text: '#fef08a', tag: '#b84747' };
       }
       if (cls.includes('helmet') || cls.includes('hardhat')) {
         return { border: '#e29547', fill: 'rgba(226, 149, 71, 0.16)', text: '#1e1610', tag: '#e29547' };
       }
       if (cls.includes('vest')) {
-        return { border: '#5db983', fill: 'rgba(93, 185, 131, 0.16)', text: '#ffffff', tag: '#439966' };
+        return { border: '#5db983', fill: 'rgba(93, 185, 131, 0.16)', text: '#fef08a', tag: '#439966' };
       }
       if (cls.includes('glove')) {
-        return { border: '#52b3c7', fill: 'rgba(82, 179, 199, 0.16)', text: '#ffffff', tag: '#3a95a8' };
+        return { border: '#52b3c7', fill: 'rgba(82, 179, 199, 0.16)', text: '#fef08a', tag: '#3a95a8' };
       }
       if (cls.includes('goggle') || cls.includes('glass')) {
-        return { border: '#6aa8db', fill: 'rgba(106, 168, 219, 0.16)', text: '#ffffff', tag: '#4e8ec2' };
+        return { border: '#6aa8db', fill: 'rgba(106, 168, 219, 0.16)', text: '#fef08a', tag: '#4e8ec2' };
       }
       if (cls.includes('mask')) {
-        return { border: '#828fea', fill: 'rgba(130, 143, 234, 0.16)', text: '#ffffff', tag: '#6977d4' };
+        return { border: '#828fea', fill: 'rgba(130, 143, 234, 0.16)', text: '#fef08a', tag: '#6977d4' };
       }
       if (cls.includes('person') || cls.includes('worker')) {
-        return { border: '#9e85e6', fill: 'rgba(158, 133, 230, 0.10)', text: '#ffffff', tag: '#866ecb' };
+        return { border: '#9e85e6', fill: 'rgba(158, 133, 230, 0.10)', text: '#fef08a', tag: '#866ecb' };
       }
-      return { border: '#94a1b5', fill: 'rgba(148, 161, 181, 0.12)', text: '#ffffff', tag: '#516179' };
+      return { border: '#94a1b5', fill: 'rgba(148, 161, 181, 0.12)', text: '#fef08a', tag: '#516179' };
     };
 
     detections.forEach((item) => {

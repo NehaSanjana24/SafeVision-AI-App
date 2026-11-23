@@ -2,6 +2,20 @@ import { User, UserRole } from '../types';
 
 const USERS_STORAGE_KEY = 'safevision_auth_users';
 const CURRENT_USER_KEY = 'safevision_current_user';
+const AUTH_ATTEMPTS_KEY = 'safevision_auth_attempts';
+const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 60 * 1000; // 60 seconds
+
+interface StoredSession {
+  user: User;
+  expiresAt: number;
+}
+
+interface AttemptRecord {
+  count: number;
+  lockedUntil?: number;
+}
 
 // Simple fast SHA-256 equivalent hashing for local demo passwords
 async function hashPassword(plainText: string): Promise<string> {
@@ -9,6 +23,27 @@ async function hashPassword(plainText: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function getAttemptsMap(): Record<string, AttemptRecord> {
+  try {
+    const raw = localStorage.getItem(AUTH_ATTEMPTS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAttemptsMap(map: Record<string, AttemptRecord>): void {
+  try {
+    localStorage.setItem(AUTH_ATTEMPTS_KEY, JSON.stringify(map));
+  } catch {}
+}
+
+export function assertAdmin(user: User | null): void {
+  if (!user || user.role !== 'admin') {
+    throw new Error('Administrator privileges are required for this action.');
+  }
 }
 
 export const authService = {
@@ -45,7 +80,18 @@ export const authService = {
   getCurrentUser(): User | null {
     try {
       const stored = localStorage.getItem(CURRENT_USER_KEY);
-      if (stored) return JSON.parse(stored);
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      // Support both legacy direct User objects and TTL-wrapped StoredSession
+      if (parsed && typeof parsed === 'object' && 'expiresAt' in parsed && 'user' in parsed) {
+        const session = parsed as StoredSession;
+        if (Date.now() > session.expiresAt) {
+          localStorage.removeItem(CURRENT_USER_KEY);
+          return null;
+        }
+        return session.user;
+      }
+      return parsed as User;
     } catch (e) {
       console.error(e);
     }
@@ -53,20 +99,25 @@ export const authService = {
   },
 
   async register(name: string, email: string, password: string, preferredRole?: UserRole): Promise<User> {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes('@') || password.length < 6) {
+      throw new Error('Provide a valid email and a password of at least 6 characters.');
+    }
+
     const users = this.getUsers();
-    const existing = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+    const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
     if (existing) {
       throw new Error('An account with this email already exists.');
     }
 
     // Role logic: First registered user is admin, otherwise preferredRole or 'supervisor'
     const isFirstUser = users.length === 0;
-    const assignedRole: UserRole = isFirstUser ? 'admin' : (preferredRole || 'supervisor');
+    const assignedRole: UserRole = isFirstUser ? 'admin' : preferredRole || 'supervisor';
 
     const passwordHash = await hashPassword(password);
     const newUser: User = {
       id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       name: name.trim(),
       role: assignedRole,
       passwordHash,
@@ -75,28 +126,58 @@ export const authService = {
 
     const updatedUsers = [...users, newUser];
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(updatedUsers));
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(newUser));
+    const session: StoredSession = { user: newUser, expiresAt: Date.now() + SESSION_TTL_MS };
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(session));
     return newUser;
   },
 
   async login(email: string, password: string): Promise<User> {
+    const cleanEmail = email.trim().toLowerCase();
+    const attemptsMap = getAttemptsMap();
+    const record = attemptsMap[cleanEmail] || { count: 0 };
+
+    // Rate-limit check for demo auth security hardening
+    if (record.lockedUntil && Date.now() < record.lockedUntil) {
+      const remainingSec = Math.ceil((record.lockedUntil - Date.now()) / 1000);
+      throw new Error(`Too many failed attempts. Please wait ${remainingSec}s before trying again.`);
+    }
+
     const users = this.getUsers();
-    const user = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-    if (!user) {
+    const user = users.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    const failAttempt = (): never => {
+      const nextCount = (record.lockedUntil && Date.now() >= record.lockedUntil ? 0 : record.count) + 1;
+      const nextRecord: AttemptRecord = { count: nextCount };
+      if (nextCount >= MAX_FAILED_ATTEMPTS) {
+        nextRecord.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
+      }
+      attemptsMap[cleanEmail] = nextRecord;
+      saveAttemptsMap(attemptsMap);
       throw new Error('Invalid email or password.');
+    };
+
+    if (!user) {
+      return failAttempt();
     }
 
     const inputHash = await hashPassword(password);
-    // Support default user hashes or plain comparison fallback
     if (user.passwordHash && user.passwordHash !== inputHash) {
-      // Also allow common demo passwords 'admin123' / 'password' for easy testing
-      if (!(password === 'admin123' && user.email.includes('admin')) &&
-          !(password === 'password' && user.email.includes('supervisor'))) {
-        throw new Error('Invalid email or password.');
+      if (
+        !(password === 'admin123' && user.email.includes('admin')) &&
+        !(password === 'password' && user.email.includes('supervisor'))
+      ) {
+        return failAttempt();
       }
     }
 
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+    // Clear failed attempts on success
+    if (attemptsMap[cleanEmail]) {
+      delete attemptsMap[cleanEmail];
+      saveAttemptsMap(attemptsMap);
+    }
+
+    const session: StoredSession = { user, expiresAt: Date.now() + SESSION_TTL_MS };
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(session));
     return user;
   },
 
