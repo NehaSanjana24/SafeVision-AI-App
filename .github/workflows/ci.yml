@@ -22,7 +22,7 @@ jobs:
           package-manager-cache: false
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: TypeScript Static Typecheck
         run: npm run typecheck
