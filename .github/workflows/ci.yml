@@ -1,3 +1,4 @@
+
 name: CI/CD Pipeline - SafeVision AI
 
 on:
@@ -18,11 +19,20 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           package-manager-cache: false
 
+      - name: Update npm
+        run: |
+          npm install --global npm@11.21.2
+          npm --version
+          node --version
+
+      - name: Clean npm Cache
+        run: npm cache clean --force
+
       - name: Install Dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: TypeScript Static Typecheck
         run: npm run typecheck
@@ -36,7 +46,7 @@ jobs:
       - name: Accessibility Automated Checks
         run: npm run test:a11y
 
-      - name: End-to-End Test Scenarios (Mock Engine)
+      - name: End-to-End Test Scenarios
         run: npm run test:e2e
 
       - name: Production Vite Bundle Build
